@@ -1,3 +1,21 @@
+# Useage
+
+1. Install requirement
+```
+brew install rust cmake
+pip3 install --upgrade pip  # enable PEP 660 support
+pip3 install -e ".[model_worker,webui]"
+```
+2. Launch controller
+```
+python3 -m fastchat.serve.controller
+```
+
+3. Launch web server
+```
+python3 -m fastchat.serve.gradio_web_server_multi
+```
+
 # FastChat
 | [**Demo**](https://chat.lmsys.org/) | [**Discord**](https://discord.gg/HSWAKCrnFx) | [**X**](https://x.com/lmsysorg) |
 

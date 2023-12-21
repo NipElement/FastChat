@@ -155,7 +155,7 @@ def build_demo(models, elo_results_file, leaderboard_table_file):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="0.0.0.0")
+    parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--port", type=int)
     parser.add_argument(
         "--share",
@@ -231,43 +231,43 @@ if __name__ == "__main__":
     args = parser.parse_args()
     logger.info(f"args: {args}")
 
-    # # Set global variables
-    # set_global_vars(args.controller_url, args.moderate)
-    # set_global_vars_named(args.moderate)
-    # set_global_vars_anony(args.moderate)
-    # if args.anony_only_for_proprietary_model:
-    #     models = get_model_list(
-    #         args.controller_url,
-    #         args.register_openai_compatible_models,
-    #         False,
-    #         False,
-    #         False,
-    #     )
-    # else:
-    #     models = get_model_list(
-    #         args.controller_url,
-    #         args.register_openai_compatible_models,
-    #         args.add_chatgpt,
-    #         args.add_claude,
-    #         args.add_palm,
-    #     )
+    # Set global variables
+    set_global_vars(args.controller_url, args.moderate)
+    set_global_vars_named(args.moderate)
+    set_global_vars_anony(args.moderate)
+    if args.anony_only_for_proprietary_model:
+        models = get_model_list(
+            args.controller_url,
+            args.register_openai_compatible_models,
+            False,
+            False,
+            False,
+        )
+    else:
+        models = get_model_list(
+            args.controller_url,
+            args.register_openai_compatible_models,
+            args.add_chatgpt,
+            args.add_claude,
+            args.add_palm,
+        )
 
     # Set authorization credentials
     auth = None
     if args.gradio_auth_path is not None:
         auth = parse_gradio_auth_creds(args.gradio_auth_path)
 
-    # # Launch the demo
-    # demo = build_demo(models, args.elo_results_file, args.leaderboard_table_file)
-    # demo.queue(
-    #     concurrency_count=args.concurrency_count, status_update_rate=10, api_open=False
-    # ).launch(
-    #     server_name=args.host,
-    #     server_port=args.port,
-    #     share=args.share,
-    #     max_threads=200,
-    #     auth=auth,
-    # )
-    models=['a','b','c','d','e','f','g']
+    # Launch the demo
     demo = build_demo(models, args.elo_results_file, args.leaderboard_table_file)
-    demo.launch(server_name=args.host, server_port=args.port, share=args.share, auth=auth)
+    demo.queue(
+        concurrency_count=args.concurrency_count, status_update_rate=10, api_open=False
+    ).launch(
+        server_name=args.host,
+        server_port=args.port,
+        share=args.share,
+        max_threads=200,
+        auth=auth,
+    )
+    # models=['a','b','c','d','e','f','g']
+    # demo = build_demo(models, args.elo_results_file, args.leaderboard_table_file)
+    # demo.launch(server_name=args.host, server_port=args.port, share=args.share, auth=auth)
