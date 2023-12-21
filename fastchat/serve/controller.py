@@ -125,7 +125,9 @@ class Controller:
         for w_name, w_info in self.worker_info.items():
             model_names.update(w_info.model_names)
 
-        return list(model_names)
+        # return list(model_names)
+        # test conctroller return list
+        return ["model1", "model2", "model3"]
 
     def get_worker_address(self, model_name: str):
         if self.dispatch_method == DispatchMethod.LOTTERY:
