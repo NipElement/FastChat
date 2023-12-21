@@ -447,19 +447,19 @@ def bot_response_multi(
 
 def build_side_by_side_ui_anony(models):
     notice_markdown = """
-# ⚔️  Chatbot Arena ⚔️ : Benchmarking LLMs in the Wild
-| [Blog](https://lmsys.org/blog/2023-05-03-arena/) | [GitHub](https://github.com/lm-sys/FastChat) | [Paper](https://arxiv.org/abs/2306.05685) | [Dataset](https://github.com/lm-sys/FastChat/blob/main/docs/dataset_release.md) | [Twitter](https://twitter.com/lmsysorg) | [Discord](https://discord.gg/HSWAKCrnFx) |
+# ⚔️  ImagenHub Arena ⚔️ : Standardizing the evaluation of conditional image generation models
+| [Blog](https://???) | [GitHub](https://github.com/TIGER-AI-Lab/ImagenHub) | [Paper](https://arxiv.org/abs/2310.01596) | [Dataset](https://huggingface.co/ImagenHub) | [Twitter](https://twitter.com/???) | [Discord](https://discord.gg/???) |
 
 ## 📜 Rules
-- Ask any question to two anonymous models (e.g., ChatGPT, Claude, Llama) and vote for the better one!
+- Ask any question to two anonymous models in same area (e.g., Dalle-2, Stable Diffusion XL in Text-guided Image Generation Model, MagicBrush, InstructPix2Pix in Text-guided Image Editing Model) and vote for the better one!
 - You can continue chatting until you identify a winner.
 - Vote won't be counted if model identity is revealed during conversation.
 
-## 🏆 Arena Elo [Leaderboard](https://huggingface.co/spaces/lmsys/chatbot-arena-leaderboard)
-We use **100K** human votes to compile an Elo-based LLM leaderboard.
-Find out who is the 🥇LLM Champion!
+## 🏆 Arena Elo [Leaderboard](https://???)
+We introduce ImagenHub, a one-stop library to standardize the inference and evaluation of all the conditional image generation models.
+Find out who is the 🥇conditional image generation models!
 
-## 👇 Chat now!
+## 👇 Generation now!
 
 """
 
