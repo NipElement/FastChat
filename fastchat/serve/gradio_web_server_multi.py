@@ -44,6 +44,7 @@ logger = build_logger("gradio_web_server_multi", "gradio_web_server_multi.log")
 
 
 def load_demo(url_params, request: gr.Request):
+    logger.info("load_demo_multi")
     global models
 
     ip = get_ip(request)
@@ -113,6 +114,7 @@ def build_demo(models, elo_results_file, leaderboard_table_file):
         theme=gr.themes.Default(text_size=text_size),
         css=block_css,
     ) as demo:
+        logger.info("build demo")
         with gr.Tabs() as tabs:
             with gr.Tab("Arena (battle)", id=0):
                 side_by_side_anony_list = build_side_by_side_ui_anony(models)
@@ -120,7 +122,7 @@ def build_demo(models, elo_results_file, leaderboard_table_file):
             with gr.Tab("Arena (side-by-side)", id=1):
                 side_by_side_named_list = build_side_by_side_ui_named(models)
 
-            with gr.Tab("Direct Generation", id=2):
+            with gr.Tab("Direct Chat", id=2):
                 single_model_list = build_single_model_ui(
                     models, add_promotion_links=True
                 )
@@ -149,13 +151,14 @@ def build_demo(models, elo_results_file, leaderboard_table_file):
             + side_by_side_named_list,
             _js=load_js,
         )
+        logger.info("build demo end")
 
     return demo
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="127.0.0.1")
+    parser.add_argument("--host", type=str, default="0.0.0.0")
     parser.add_argument("--port", type=int)
     parser.add_argument(
         "--share",
@@ -268,6 +271,3 @@ if __name__ == "__main__":
         max_threads=200,
         auth=auth,
     )
-    # models=['a','b','c','d','e','f','g']
-    # demo = build_demo(models, args.elo_results_file, args.leaderboard_table_file)
-    # demo.launch(server_name=args.host, server_port=args.port, share=args.share, auth=auth)

@@ -9,6 +9,9 @@ import json
 import os
 import random
 import time
+from PIL import Image
+import numpy as np
+
 import uuid
 
 import gradio as gr
@@ -112,6 +115,30 @@ class State:
         )
         return base
 
+class ImageState:
+    def __init__(self, model_name):
+        self.conv = get_conversation_template(model_name)
+        # self.conv_id = uuid.uuid4().hex
+        self.skip_next = False
+        self.model_name = model_name
+        self.prompt = None
+        # self.conv = prompt
+        self.output = None
+
+        # if model_name == "palm-2":
+        #     # According to release note, "chat-bison@001" is PaLM 2 for chat.
+        #     # https://cloud.google.com/vertex-ai/docs/release-notes#May_10_2023
+        #     self.palm_chat = init_palm_chat("chat-bison@001")
+
+    # def to_gradio_chatbot(self):
+    #     return self.conv.to_gradio_chatbot()
+
+    def dict(self):
+        base = {
+                "model_name": self.model_name,
+                }
+        return base
+
 
 def set_global_vars(controller_url_, enable_moderation_):
     global controller_url, enable_moderation
@@ -164,13 +191,14 @@ def get_model_list(
 
 
 def load_demo_single(models, url_params):
+    logger.info("load_demo_single")
     selected_model = models[0] if len(models) > 0 else ""
     if "model" in url_params:
         model = url_params["model"]
         if model in models:
             selected_model = model
 
-    dropdown_update = gr.Dropdown.update(
+    dropdown_update = gr.Dropdown(
         choices=models, value=selected_model, visible=True
     )
 
@@ -230,11 +258,17 @@ def flag_last_response(state, model_selector, request: gr.Request):
     return ("",) + (disable_btn,) * 3
 
 
+# def regenerate(state, request: gr.Request):
+#     ip = get_ip(request)
+#     logger.info(f"regenerate. ip: {ip}")
+#     state.conv.update_last_message(None)
+#     return (state, state.to_gradio_chatbot(), "") + (disable_btn,) * 5
+
 def regenerate(state, request: gr.Request):
     ip = get_ip(request)
     logger.info(f"regenerate. ip: {ip}")
     state.conv.update_last_message(None)
-    return (state, state.to_gradio_chatbot(), "") + (disable_btn,) * 5
+    return (state, "", "") + (disable_btn,) * 5
 
 
 def clear_history(request: gr.Request):
@@ -257,11 +291,11 @@ def add_text(state, model_selector, text, request: gr.Request):
     logger.info(f"add_text. ip: {ip}. len: {len(text)}")
 
     if state is None:
-        state = State(model_selector)
+        state = ImageState(model_selector)
 
     if len(text) <= 0:
         state.skip_next = True
-        return (state, state.to_gradio_chatbot(), "") + (no_change_btn,) * 5
+        return (state, "", "") + (no_change_btn,) * 5
 
     flagged = moderation_filter(text, [state.model_name])
     if flagged:
@@ -273,14 +307,42 @@ def add_text(state, model_selector, text, request: gr.Request):
     if (len(conv.messages) - conv.offset) // 2 >= CONVERSATION_TURN_LIMIT:
         logger.info(f"conversation turn limit. ip: {ip}. text: {text}")
         state.skip_next = True
-        return (state, state.to_gradio_chatbot(), CONVERSATION_LIMIT_MSG) + (
+        return (state, "", CONVERSATION_LIMIT_MSG) + (
             no_change_btn,
         ) * 5
 
     text = text[:INPUT_CHAR_LEN_LIMIT]  # Hard cut-off
     conv.append_message(conv.roles[0], text)
-    conv.append_message(conv.roles[1], None)
-    return (state, state.to_gradio_chatbot(), "") + (disable_btn,) * 5
+    # conv.append_message(conv.roles[1], None)
+    return (state, gr.Image(), text) + (disable_btn,) * 5
+
+# def add_text(state, model_selector, text, request: gr.Request):
+#     ip = get_ip(request)
+#     logger.info(f"add_text. ip: {ip}. len: {len(text)}")
+#
+#     if state is None:
+#         state = ImageState(model_selector)
+#
+#     if len(text) <= 0:
+#         state.skip_next = True
+#         return (state, "", "") + (no_change_btn,) * 5
+#
+#     flagged = moderation_filter(text, [state.model_name])
+#     if flagged:
+#         logger.info(f"violate moderation. ip: {ip}. text: {text}")
+#         # overwrite the original text
+#         text = MODERATION_MSG
+#
+#     # if (len(conv.messages) - conv.offset) // 2 >= CONVERSATION_TURN_LIMIT:
+#     #     logger.info(f"conversation turn limit. ip: {ip}. text: {text}")
+#     #     state.skip_next = True
+#     #     return (state, state.to_gradio_chatbot(), CONVERSATION_LIMIT_MSG) + (
+#     #         no_change_btn,
+#     #     ) * 5
+#
+#     text = text[:INPUT_CHAR_LEN_LIMIT]  # Hard cut-off
+#     conv.append_message(conv.roles[0], text)
+#     return (state, "", "") + (disable_btn,) * 5
 
 
 def post_process_code(code):
@@ -292,6 +354,34 @@ def post_process_code(code):
                 blocks[i] = blocks[i].replace("\\_", "_")
         code = sep.join(blocks)
     return code
+
+
+def model_diffusion_worker_stream_iter(
+    model_name,
+    worker_addr,
+    prompt,
+):
+    # Make requests
+    gen_params = {
+        "model": model_name,
+        "prompt": prompt
+    }
+    logger.info(f"==== request ====\n{gen_params}")
+
+    # Stream output
+    response = requests.post(
+        worker_addr + "/worker_generate_stream",
+        headers=headers,
+        json=gen_params,
+        stream=True,
+        timeout=WORKER_API_TIMEOUT,
+    )
+
+    for chunk in response.iter_lines(decode_unicode=False, delimiter=b"\0"):
+        if chunk:
+            data = json.loads(chunk.decode())
+            yield data
+
 
 
 def model_worker_stream_iter(
@@ -330,6 +420,114 @@ def model_worker_stream_iter(
         if chunk:
             data = json.loads(chunk.decode())
             yield data
+
+
+def diffusion_response(state, request: gr.Request):
+    ip = get_ip(request)
+    logger.info(f"diffusion_response. ip: {ip}")
+    start_tstamp = time.time()
+    conv, model_name = state.conv, state.model_name
+    prompt = conv.messages[0][1]
+    logger.info(f'prompt message: {prompt}')
+
+    ret = requests.post(
+        controller_url + "/get_worker_address", json={"model": model_name}
+    )
+    worker_addr = ret.json()["address"]
+    logger.info(f"model_name: {model_name}, worker_addr: {worker_addr}")
+
+
+    # Construct prompt.
+    # We need to call it here, so it will not be affected by "▌".
+    # prompt = conv.get_prompt()
+
+    # Set repetition_penalty
+    # if "t5" in model_name:
+    #     repetition_penalty = 1.2
+    # else:
+    #     repetition_penalty = 1.0
+
+    stream_iter = model_diffusion_worker_stream_iter(
+        model_name,
+        worker_addr,
+        prompt
+    )
+
+    # try:
+    for i, data in enumerate(stream_iter):
+        error_code = data["error_code"]
+        logger.info(f"error_code: {error_code}")
+        if error_code == 0:
+            logger.info(f"yes")
+            # if data:
+            grey = np.array(data['text'])
+            logger.info(f"grey.shape: {grey.shape}")
+            # logger.info(f"grey: {grey[0]}")
+            # array_img = np.dstack((grey, grey, grey))
+            output = Image.fromarray(grey.astype(np.uint8))
+            logger.info(f"output.size {output.size}")
+            yield (state, output) + (disable_btn,) * 5
+        else:
+            output = data + f"\n\n(error_code: {data['error_code']})"
+            state.output = output
+            yield (state, output) + (
+                disable_btn,
+                disable_btn,
+                disable_btn,
+                enable_btn,
+                enable_btn,
+            )
+            return
+    # output = data
+    # if "vicuna" in model_name:
+    #     output = post_process_code(output)
+    state.output = output
+    # yield (state, state.to_gradio_chatbot()) + (enable_btn,) * 5
+    yield (state, output) + (disable_btn,) * 5
+    # except requests.exceptions.RequestException as e:
+    #     # conv.update_last_message(
+    #     #     f"{SERVER_ERROR_MSG}\n\n"
+    #     #     f"(error_code: {ErrorCode.GRADIO_REQUEST_ERROR}, {e})"
+    #     # )
+    #     logger.error(f"{SERVER_ERROR_MSG}\n\n"
+    #                  f"(error_code: {ErrorCode.GRADIO_REQUEST_ERROR}, {e})")
+    #     yield (state, "") + (
+    #         disable_btn,
+    #         disable_btn,
+    #         disable_btn,
+    #         enable_btn,
+    #         enable_btn,
+    #     )
+    #     return
+    # except Exception as e:
+    #     logger.error(
+    #         f"{SERVER_ERROR_MSG}\n\n"
+    #         f"(error_code: {ErrorCode.GRADIO_STREAM_UNKNOWN_ERROR}, {e})"
+    #     )
+    #     yield (state, "") + (
+    #         disable_btn,
+    #         disable_btn,
+    #         disable_btn,
+    #         enable_btn,
+    #         enable_btn,
+    #     )
+    #     return
+
+    finish_tstamp = time.time()
+    # logger.info(f"===output===: {output}")
+
+    with open(get_conv_log_filename(), "a") as fout:
+        data = {
+            "tstamp": round(finish_tstamp, 4),
+            "type": "chat",
+            "model": model_name,
+            "gen_params": {},
+            "start": round(start_tstamp, 4),
+            "finish": round(finish_tstamp, 4),
+            "state": state.dict(),
+            "ip": get_ip(request),
+        }
+        fout.write(json.dumps(data) + "\n")
 
 
 def bot_response(state, temperature, top_p, max_new_tokens, request: gr.Request):
@@ -611,6 +809,7 @@ Learn more about partnership [here](https://lmsys.org/donations/).
     # return [state]
 
 
+
 def build_single_model_ui(models, add_promotion_links=False):
     promotion = (
         """
@@ -648,18 +847,31 @@ def build_single_model_ui(models, add_promotion_links=False):
                 model_description_md = get_model_description_md(models)
                 gr.Markdown(model_description_md, elem_id="model_description_markdown")
 
-        chatbot = gr.Chatbot(
-            elem_id="chatbot",
-            label="Scroll down and start chatting",
-            height=550,
-        )
+        # chatbot = gr.Chatbot(
+        #     elem_id="chatbot",
+        #     label="Scroll down and start chatting",
+        #     height=550,
+        # )
+
+    # with gr.Row():
+    #     textbox = gr.Textbox(
+    #         show_label=False,
+    #         placeholder="👉 Enter your prompt and press ENTER",
+    #         elem_id="input_box",
+    #     )
+    #     send_btn = gr.Button(value="Send", variant="primary", scale=0)
+
     with gr.Row():
+
         textbox = gr.Textbox(
             show_label=False,
             placeholder="👉 Enter your prompt and press ENTER",
             elem_id="input_box",
         )
         send_btn = gr.Button(value="Send", variant="primary", scale=0)
+
+    with gr.Row():
+        chatbot = gr.Image()
 
     with gr.Row() as button_row:
         upvote_btn = gr.Button(value="👍  Upvote", interactive=False)
@@ -668,31 +880,31 @@ def build_single_model_ui(models, add_promotion_links=False):
         regenerate_btn = gr.Button(value="🔄  Regenerate", interactive=False)
         clear_btn = gr.Button(value="🗑️  Clear history", interactive=False)
 
-    with gr.Accordion("Parameters", open=False) as parameter_row:
-        temperature = gr.Slider(
-            minimum=0.0,
-            maximum=1.0,
-            value=0.7,
-            step=0.1,
-            interactive=True,
-            label="Temperature",
-        )
-        top_p = gr.Slider(
-            minimum=0.0,
-            maximum=1.0,
-            value=1.0,
-            step=0.1,
-            interactive=True,
-            label="Top P",
-        )
-        max_output_tokens = gr.Slider(
-            minimum=16,
-            maximum=1024,
-            value=512,
-            step=64,
-            interactive=True,
-            label="Max output tokens",
-        )
+    # with gr.Accordion("Parameters", open=False) as parameter_row:
+    #     temperature = gr.Slider(
+    #         minimum=0.0,
+    #         maximum=1.0,
+    #         value=0.7,
+    #         step=0.1,
+    #         interactive=True,
+    #         label="Temperature",
+    #     )
+    #     top_p = gr.Slider(
+    #         minimum=0.0,
+    #         maximum=1.0,
+    #         value=1.0,
+    #         step=0.1,
+    #         interactive=True,
+    #         label="Top P",
+    #     )
+    #     max_output_tokens = gr.Slider(
+    #         minimum=16,
+    #         maximum=1024,
+    #         value=512,
+    #         step=64,
+    #         interactive=True,
+    #         label="Max output tokens",
+    #     )
 
     if add_promotion_links:
         gr.Markdown(acknowledgment_md, elem_id="ack_markdown")
@@ -714,29 +926,50 @@ def build_single_model_ui(models, add_promotion_links=False):
         [state, model_selector],
         [textbox, upvote_btn, downvote_btn, flag_btn],
     )
+    # regenerate_btn.click(regenerate, state, [state, chatbot, textbox] + btn_list).then(
+    #     bot_response,
+    #     [state, temperature, top_p, max_output_tokens],
+    #     [state, chatbot] + btn_list,
+    # )
     regenerate_btn.click(regenerate, state, [state, chatbot, textbox] + btn_list).then(
-        bot_response,
-        [state, temperature, top_p, max_output_tokens],
+        diffusion_response,
+        [state],
         [state, chatbot] + btn_list,
     )
     clear_btn.click(clear_history, None, [state, chatbot, textbox] + btn_list)
 
     model_selector.change(clear_history, None, [state, chatbot, textbox] + btn_list)
 
+    # textbox.submit(
+    #     add_text, [state, model_selector, textbox], [state, chatbot, textbox] + btn_list
+    # ).then(
+    #     bot_response,
+    #     [state, temperature, top_p, max_output_tokens],
+    #     [state, chatbot] + btn_list,
+    # )
     textbox.submit(
         add_text, [state, model_selector, textbox], [state, chatbot, textbox] + btn_list
     ).then(
-        bot_response,
-        [state, temperature, top_p, max_output_tokens],
+        diffusion_response,
+        [state],
         [state, chatbot] + btn_list,
     )
+    # send_btn.click(
+    #     add_text,
+    #     [state, model_selector, textbox],
+    #     [state, chatbot, textbox] + btn_list,
+    # ).then(
+    #     bot_response,
+    #     [state, temperature, top_p, max_output_tokens],
+    #     [state, chatbot] + btn_list,
+    # )
     send_btn.click(
         add_text,
         [state, model_selector, textbox],
         [state, chatbot, textbox] + btn_list,
     ).then(
-        bot_response,
-        [state, temperature, top_p, max_output_tokens],
+        diffusion_response,
+        [state],
         [state, chatbot] + btn_list,
     )
 

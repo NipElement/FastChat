@@ -192,7 +192,9 @@ def create_background_tasks():
 
 @app.post("/worker_generate_stream")
 async def api_generate_stream(request: Request):
+    logger.info("base_model_worker")
     params = await request.json()
+    logger.info(f'params: {params}')
     await acquire_worker_semaphore()
     generator = worker.generate_stream_gate(params)
     background_tasks = create_background_tasks()

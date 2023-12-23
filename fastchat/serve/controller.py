@@ -124,10 +124,11 @@ class Controller:
 
         for w_name, w_info in self.worker_info.items():
             model_names.update(w_info.model_names)
+        logger.info(f"model names: {list(model_names)}")
 
-        # return list(model_names)
+        return list(model_names)
         # test conctroller return list
-        return ["model1", "model2", "model3"]
+        # return ["model1", "model2", "model3"]
 
     def get_worker_address(self, model_name: str):
         if self.dispatch_method == DispatchMethod.LOTTERY:
@@ -296,6 +297,7 @@ async def receive_heart_beat(request: Request):
 
 @app.post("/worker_generate_stream")
 async def worker_api_generate_stream(request: Request):
+    logger.info("controller")
     params = await request.json()
     generator = controller.worker_api_generate_stream(params)
     return StreamingResponse(generator)

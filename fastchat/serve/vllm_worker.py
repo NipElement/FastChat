@@ -178,6 +178,7 @@ def create_background_tasks(request_id):
 
 @app.post("/worker_generate_stream")
 async def api_generate_stream(request: Request):
+    logger.info("vllm_worker")
     params = await request.json()
     await acquire_worker_semaphore()
     request_id = random_uuid()

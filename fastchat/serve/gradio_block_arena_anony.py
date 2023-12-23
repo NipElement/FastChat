@@ -21,6 +21,7 @@ from fastchat.serve.gradio_block_arena_named import flash_buttons
 from fastchat.serve.gradio_web_server import (
     State,
     bot_response,
+    diffusion_response,
     get_conv_log_filename,
     no_change_btn,
     enable_btn,
@@ -50,6 +51,7 @@ def set_global_vars_anony(enable_moderation_):
 
 
 def load_demo_side_by_side_anony(models_, url_params):
+    logger.info("load_demo_side_by_side_anony")
     global models
     models = models_
 
@@ -129,12 +131,19 @@ def bothbad_vote_last_response(
         yield x
 
 
+# def regenerate(state0, state1, request: gr.Request):
+#     logger.info(f"regenerate (anony). ip: {get_ip(request)}")
+#     states = [state0, state1]
+#     for i in range(num_sides):
+#         states[i].conv.update_last_message(None)
+#     return states + [x.to_gradio_chatbot() for x in states] + [""] + [disable_btn] * 6
+
 def regenerate(state0, state1, request: gr.Request):
     logger.info(f"regenerate (anony). ip: {get_ip(request)}")
     states = [state0, state1]
     for i in range(num_sides):
         states[i].conv.update_last_message(None)
-    return states + [x.to_gradio_chatbot() for x in states] + [""] + [disable_btn] * 6
+    return states + ["" for x in states] + [""] + [disable_btn] * 6
 
 
 def clear_history(request: gr.Request):
@@ -160,6 +169,8 @@ def share_click(state0, state1, model_selector0, model_selector1, request: gr.Re
 
 SAMPLING_WEIGHTS = {
     # tier 0
+    "stable-diffusion-v1-4": 4,
+    "stable-diffusion-v1-5": 4,
     "gpt-4": 4,
     "gpt-4-turbo": 4,
     "gpt-3.5-turbo": 2,
@@ -320,6 +331,107 @@ def get_battle_pair():
         return rival_model, chosen_model
 
 
+# def add_text(
+#     state0, state1, model_selector0, model_selector1, text, request: gr.Request
+# ):
+#     ip = get_ip(request)
+#     logger.info(f"add_text (anony). ip: {ip}. len: {len(text)}")
+#     states = [state0, state1]
+#     model_selectors = [model_selector0, model_selector1]
+#
+#     # Init states if necessary
+#     if states[0] is None:
+#         assert states[1] is None
+#
+#         model_left, model_right = get_battle_pair()
+#         states = [
+#             State(model_left),
+#             State(model_right),
+#         ]
+#
+#     if len(text) <= 0:
+#         for i in range(num_sides):
+#             states[i].skip_next = True
+#         return (
+#             states
+#             + [x.to_gradio_chatbot() for x in states]
+#             + [""]
+#             + [
+#                 no_change_btn,
+#             ]
+#             * 6
+#             + [""]
+#         )
+#
+#     model_list = [states[i].model_name for i in range(num_sides)]
+#     flagged = moderation_filter(text, model_list)
+#     if flagged:
+#         logger.info(f"violate moderation (anony). ip: {ip}. text: {text}")
+#         # overwrite the original text
+#         text = MODERATION_MSG
+#
+#     conv = states[0].conv
+#     if (len(conv.messages) - conv.offset) // 2 >= CONVERSATION_TURN_LIMIT:
+#         logger.info(f"conversation turn limit. ip: {get_ip(request)}. text: {text}")
+#         for i in range(num_sides):
+#             states[i].skip_next = True
+#         return (
+#             states
+#             + [x.to_gradio_chatbot() for x in states]
+#             + [CONVERSATION_LIMIT_MSG]
+#             + [
+#                 no_change_btn,
+#             ]
+#             * 6
+#             + [""]
+#         )
+#
+#     text = text[:INPUT_CHAR_LEN_LIMIT]  # Hard cut-off
+#     for i in range(num_sides):
+#         states[i].conv.append_message(states[i].conv.roles[0], text)
+#         states[i].conv.append_message(states[i].conv.roles[1], None)
+#         states[i].skip_next = False
+#
+#     slow_model_msg = ""
+#     for i in range(num_sides):
+#         if "deluxe" in states[i].model_name:
+#             slow_model_msg = SLOW_MODEL_MSG
+#     return (
+#         states
+#         + [x.to_gradio_chatbot() for x in states]
+#         + [""]
+#         + [
+#             disable_btn,
+#         ]
+#         * 6
+#         + [slow_model_msg]
+#     )
+
+class ImageState:
+    def __init__(self, model_name):
+        self.conv = get_conversation_template(model_name)
+        # self.conv_id = uuid.uuid4().hex
+        self.skip_next = False
+        self.model_name = model_name
+        self.prompt = None
+        # self.conv = prompt
+        self.output = None
+
+        # if model_name == "palm-2":
+        #     # According to release note, "chat-bison@001" is PaLM 2 for chat.
+        #     # https://cloud.google.com/vertex-ai/docs/release-notes#May_10_2023
+        #     self.palm_chat = init_palm_chat("chat-bison@001")
+
+    # def to_gradio_chatbot(self):
+    #     return self.conv.to_gradio_chatbot()
+
+    def dict(self):
+        base = {
+                "model_name": self.model_name,
+                }
+        return base
+
+
 def add_text(
     state0, state1, model_selector0, model_selector1, text, request: gr.Request
 ):
@@ -334,8 +446,8 @@ def add_text(
 
         model_left, model_right = get_battle_pair()
         states = [
-            State(model_left),
-            State(model_right),
+            ImageState(model_left),
+            ImageState(model_right),
         ]
 
     if len(text) <= 0:
@@ -343,7 +455,7 @@ def add_text(
             states[i].skip_next = True
         return (
             states
-            + [x.to_gradio_chatbot() for x in states]
+            + ["" for x in states]
             + [""]
             + [
                 no_change_btn,
@@ -366,7 +478,7 @@ def add_text(
             states[i].skip_next = True
         return (
             states
-            + [x.to_gradio_chatbot() for x in states]
+            + ["" for x in states]
             + [CONVERSATION_LIMIT_MSG]
             + [
                 no_change_btn,
@@ -378,7 +490,7 @@ def add_text(
     text = text[:INPUT_CHAR_LEN_LIMIT]  # Hard cut-off
     for i in range(num_sides):
         states[i].conv.append_message(states[i].conv.roles[0], text)
-        states[i].conv.append_message(states[i].conv.roles[1], None)
+        # states[i].conv.append_message(states[i].conv.roles[1], None)
         states[i].skip_next = False
 
     slow_model_msg = ""
@@ -387,8 +499,8 @@ def add_text(
             slow_model_msg = SLOW_MODEL_MSG
     return (
         states
-        + [x.to_gradio_chatbot() for x in states]
-        + [""]
+        + [gr.Image() for x in states]
+        + [text]
         + [
             disable_btn,
         ]
@@ -397,12 +509,9 @@ def add_text(
     )
 
 
-def bot_response_multi(
+def diffusion_response_multi(
     state0,
     state1,
-    temperature,
-    top_p,
-    max_new_tokens,
     request: gr.Request,
 ):
     logger.info(f"bot_response_multi (anony). ip: {get_ip(request)}")
@@ -412,8 +521,8 @@ def bot_response_multi(
         yield (
             state0,
             state1,
-            state0.to_gradio_chatbot(),
-            state1.to_gradio_chatbot(),
+            gr.Image(),
+            gr.Image(),
         ) + (no_change_btn,) * 6
         return
 
@@ -421,11 +530,8 @@ def bot_response_multi(
     gen = []
     for i in range(num_sides):
         gen.append(
-            bot_response(
+            diffusion_response(
                 states[i],
-                temperature,
-                top_p,
-                max_new_tokens,
                 request,
             )
         )
@@ -443,9 +549,56 @@ def bot_response_multi(
         yield states + chatbots + [disable_btn] * 6
         if stop:
             break
+# def bot_response_multi(
+#     state0,
+#     state1,
+#     temperature,
+#     top_p,
+#     max_new_tokens,
+#     request: gr.Request,
+# ):
+#     logger.info(f"bot_response_multi (anony). ip: {get_ip(request)}")
+#
+#     if state0 is None or state0.skip_next:
+#         # This generate call is skipped due to invalid inputs
+#         yield (
+#             state0,
+#             state1,
+#             state0.to_gradio_chatbot(),
+#             state1.to_gradio_chatbot(),
+#         ) + (no_change_btn,) * 6
+#         return
+#
+#     states = [state0, state1]
+#     gen = []
+#     for i in range(num_sides):
+#         gen.append(
+#             bot_response(
+#                 states[i],
+#                 temperature,
+#                 top_p,
+#                 max_new_tokens,
+#                 request,
+#             )
+#         )
+#
+#     chatbots = [None] * num_sides
+#     while True:
+#         stop = True
+#         for i in range(num_sides):
+#             try:
+#                 ret = next(gen[i])
+#                 states[i], chatbots[i] = ret[0], ret[1]
+#                 stop = False
+#             except StopIteration:
+#                 pass
+#         yield states + chatbots + [disable_btn] * 6
+#         if stop:
+#             break
 
 
 def build_side_by_side_ui_anony(models):
+    logger.info("build_side_by_side_ui_anony")
     notice_markdown = """
 # ⚔️  ImagenHub Arena ⚔️ : Standardizing the evaluation of conditional image generation models
 | [Blog](https://???) | [GitHub](https://github.com/TIGER-AI-Lab/ImagenHub) | [Paper](https://arxiv.org/abs/2310.01596) | [Dataset](https://huggingface.co/ImagenHub) | [Twitter](https://twitter.com/???) | [Discord](https://discord.gg/???) |
@@ -480,6 +633,9 @@ Find out who is the 🥇conditional image generation models!
                     chatbots[i] = gr.Chatbot(
                         label=label, elem_id=f"chatbot", height=550
                     )
+                    # chatbots[i] = gr.Image(
+                    #     label=label
+                    # )
 
         with gr.Row():
             for i in range(num_sides):
@@ -514,31 +670,31 @@ Find out who is the 🥇conditional image generation models!
         regenerate_btn = gr.Button(value="🔄  Regenerate", interactive=False)
         share_btn = gr.Button(value="📷  Share")
 
-    with gr.Accordion("Parameters", open=False) as parameter_row:
-        temperature = gr.Slider(
-            minimum=0.0,
-            maximum=1.0,
-            value=0.7,
-            step=0.1,
-            interactive=True,
-            label="Temperature",
-        )
-        top_p = gr.Slider(
-            minimum=0.0,
-            maximum=1.0,
-            value=1.0,
-            step=0.1,
-            interactive=True,
-            label="Top P",
-        )
-        max_output_tokens = gr.Slider(
-            minimum=16,
-            maximum=1024,
-            value=512,
-            step=64,
-            interactive=True,
-            label="Max output tokens",
-        )
+    # with gr.Accordion("Parameters", open=False) as parameter_row:
+    #     temperature = gr.Slider(
+    #         minimum=0.0,
+    #         maximum=1.0,
+    #         value=0.7,
+    #         step=0.1,
+    #         interactive=True,
+    #         label="Temperature",
+    #     )
+    #     top_p = gr.Slider(
+    #         minimum=0.0,
+    #         maximum=1.0,
+    #         value=1.0,
+    #         step=0.1,
+    #         interactive=True,
+    #         label="Top P",
+    #     )
+    #     max_output_tokens = gr.Slider(
+    #         minimum=16,
+    #         maximum=1024,
+    #         value=512,
+    #         step=64,
+    #         interactive=True,
+    #         label="Max output tokens",
+    #     )
 
     gr.Markdown(acknowledgment_md, elem_id="ack_markdown")
 
@@ -574,8 +730,8 @@ Find out who is the 🥇conditional image generation models!
     regenerate_btn.click(
         regenerate, states, states + chatbots + [textbox] + btn_list
     ).then(
-        bot_response_multi,
-        states + [temperature, top_p, max_output_tokens],
+        diffusion_response_multi,
+        states,
         states + chatbots + btn_list,
     ).then(
         flash_buttons, [], btn_list
@@ -613,8 +769,8 @@ function (a, b, c, d) {
         states + model_selectors + [textbox],
         states + chatbots + [textbox] + btn_list + [slow_warning],
     ).then(
-        bot_response_multi,
-        states + [temperature, top_p, max_output_tokens],
+        diffusion_response_multi,
+        states,
         states + chatbots + btn_list,
     ).then(
         flash_buttons,
@@ -627,8 +783,8 @@ function (a, b, c, d) {
         states + model_selectors + [textbox],
         states + chatbots + [textbox] + btn_list,
     ).then(
-        bot_response_multi,
-        states + [temperature, top_p, max_output_tokens],
+        diffusion_response_multi,
+        states,
         states + chatbots + btn_list,
     ).then(
         flash_buttons, [], btn_list

@@ -8,6 +8,8 @@ import json
 import os
 from typing import List, Optional
 import uuid
+import base64
+import numpy as np
 
 import torch
 import torch.nn.functional as F
@@ -20,6 +22,7 @@ from fastchat.model.model_adapter import (
     add_model_args,
     get_generate_stream_function,
 )
+import requests
 from fastchat.modules.awq import AWQConfig
 from fastchat.modules.exllama import ExllamaConfig
 from fastchat.modules.xfastertransformer import XftConfig
@@ -92,6 +95,7 @@ class ModelWorker(BaseModelWorker):
         if self.tokenizer.pad_token == None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
         self.context_len = get_context_length(self.model.config)
+        logger.info(f"model type: {str(type(self.model)).lower()}")
         self.generate_stream_func = get_generate_stream_function(self.model, model_path)
         self.stream_interval = stream_interval
         self.embed_in_truncate = embed_in_truncate
@@ -103,45 +107,52 @@ class ModelWorker(BaseModelWorker):
     def generate_stream_gate(self, params):
         self.call_ct += 1
 
-        try:
-            if self.seed is not None:
-                set_seed(self.seed)
-            for output in self.generate_stream_func(
-                self.model,
-                self.tokenizer,
-                params,
-                self.device,
-                self.context_len,
-                self.stream_interval,
-            ):
-                ret = {
-                    "text": output["text"],
-                    "error_code": 0,
-                }
-                if "usage" in output:
-                    ret["usage"] = output["usage"]
-                if "finish_reason" in output:
-                    ret["finish_reason"] = output["finish_reason"]
-                if "logprobs" in output:
-                    ret["logprobs"] = output["logprobs"]
-                yield json.dumps(ret).encode() + b"\0"
-        except torch.cuda.OutOfMemoryError as e:
+        # try:
+        if self.seed is not None:
+            set_seed(self.seed)
+        for output in self.generate_stream_func(
+            self.model,
+            self.tokenizer,
+            params,
+            self.device,
+            self.context_len,
+            self.stream_interval,
+        ):
+            logger.info(f"output.shape: {output['text'].size}")
+            # image = base64.b64encode(np.array(output["text"])).decode("utf-8")
+            # image = base64.b64encode(np.array(output["text"]).tobytes()).decode("utf-8")
+            image = np.array(output["text"]).tolist()
             ret = {
-                "text": f"{SERVER_ERROR_MSG}\n\n({e})",
-                "error_code": ErrorCode.CUDA_OUT_OF_MEMORY,
+                "text": image,
+                "error_code": 0,
             }
+            # if "usage" in output:
+            #     ret["usage"] = output["usage"]
+            # if "finish_reason" in output:
+            #     ret["finish_reason"] = output["finish_reason"]
+            # if "logprobs" in output:
+            #     ret["logprobs"] = output["logprobs"]
             yield json.dumps(ret).encode() + b"\0"
-        except (ValueError, RuntimeError) as e:
-            ret = {
-                "text": f"{SERVER_ERROR_MSG}\n\n({e})",
-                "error_code": ErrorCode.INTERNAL_ERROR,
-            }
-            yield json.dumps(ret).encode() + b"\0"
+            # yield ret
+        # except torch.cuda.OutOfMemoryError as e:
+        #     ret = {
+        #         "text": f"{SERVER_ERROR_MSG}\n\n({e})",
+        #         "error_code": ErrorCode.CUDA_OUT_OF_MEMORY,
+        #     }
+        #     yield json.dumps(ret).encode() + b"\0"
+        # except (ValueError, RuntimeError) as e:
+        #     ret = {
+        #         "text": f"{SERVER_ERROR_MSG}\n\n({e})",
+        #         "error_code": ErrorCode.INTERNAL_ERROR,
+        #     }
+        #     yield json.dumps(ret).encode() + b"\0"
 
     def generate_gate(self, params):
         for x in self.generate_stream_gate(params):
+            #  return x
             pass
         return json.loads(x[:-1].decode())
+        # return x
 
     def __process_embed_chunk(self, input_ids, attention_mask, **model_type_dict):
         if model_type_dict.get("is_bert"):

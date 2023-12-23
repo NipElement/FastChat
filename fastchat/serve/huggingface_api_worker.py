@@ -214,6 +214,7 @@ def create_background_tasks(worker):
 
 @app.post("/worker_generate_stream")
 async def api_generate_stream(request: Request):
+    logger.info("huggingface_api_worker")
     params = await request.json()
     worker = worker_map[params["model"]]
     await acquire_worker_semaphore(worker)
