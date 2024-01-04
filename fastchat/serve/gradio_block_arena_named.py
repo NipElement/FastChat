@@ -44,6 +44,7 @@ enable_moderation = False
 
 def set_global_vars_named(enable_moderation_):
     global enable_moderation
+    global enable_moderation
     enable_moderation = enable_moderation_
 
 
@@ -131,14 +132,14 @@ def regenerate(state0, state1, request: gr.Request):
     states = [state0, state1]
     for i in range(num_sides):
         states[i].conv.update_last_message(None)
-    return states + ["" for x in states] + [""] + [disable_btn] * 6
+    return states + [gr.Image() for x in states] + [""] + [disable_btn] * 6
 
 
 def clear_history(request: gr.Request):
     logger.info(f"clear_history (named). ip: {get_ip(request)}")
     return (
         [None] * num_sides
-        + [None] * num_sides
+        + [gr.Image()] * num_sides
         + [""]
         + [invisible_btn] * 4
         + [disable_btn] * 2
@@ -153,29 +154,29 @@ def share_click(state0, state1, model_selector0, model_selector1, request: gr.Re
         )
 
 
-class ImageState:
-    def __init__(self, model_name):
-        self.conv = get_conversation_template(model_name)
-        # self.conv_id = uuid.uuid4().hex
-        self.skip_next = False
-        self.model_name = model_name
-        self.prompt = None
-        # self.conv = prompt
-        self.output = None
-
-        # if model_name == "palm-2":
-        #     # According to release note, "chat-bison@001" is PaLM 2 for chat.
-        #     # https://cloud.google.com/vertex-ai/docs/release-notes#May_10_2023
-        #     self.palm_chat = init_palm_chat("chat-bison@001")
-
-    # def to_gradio_chatbot(self):
-    #     return self.conv.to_gradio_chatbot()
-
-    def dict(self):
-        base = {
-                "model_name": self.model_name,
-                }
-        return base
+# class ImageState:
+#     def __init__(self, model_name):
+#         self.conv = get_conversation_template(model_name)
+#         # self.conv_id = uuid.uuid4().hex
+#         self.skip_next = False
+#         self.model_name = model_name
+#         self.prompt = None
+#         # self.conv = prompt
+#         self.output = None
+#
+#         # if model_name == "palm-2":
+#         #     # According to release note, "chat-bison@001" is PaLM 2 for chat.
+#         #     # https://cloud.google.com/vertex-ai/docs/release-notes#May_10_2023
+#         #     self.palm_chat = init_palm_chat("chat-bison@001")
+#
+#     # def to_gradio_chatbot(self):
+#     #     return self.conv.to_gradio_chatbot()
+#
+#     def dict(self):
+#         base = {
+#                 "model_name": self.model_name,
+#                 }
+#         return base
 
 
 def add_text(
@@ -199,7 +200,7 @@ def add_text(
             states[i].skip_next = True
         return (
             states
-            + ["" for x in states]
+            + [gr.Image() for x in states]
             + [""]
             + [
                 no_change_btn,
@@ -221,7 +222,7 @@ def add_text(
             states[i].skip_next = True
         return (
             states
-            + ["" for x in states]
+            + [gr.Image() for x in states]
             + [CONVERSATION_LIMIT_MSG]
             + [
                 no_change_btn,
@@ -413,7 +414,7 @@ def build_side_by_side_ui_named(models):
     logger.info("build_side_by_side_ui_named")
     notice_markdown = """
 # ⚔️  ImagenHub Arena ⚔️ : Standardizing the evaluation of conditional image generation models
-| [Blog](https://???) | [GitHub](https://github.com/TIGER-AI-Lab/ImagenHub) | [Paper](https://arxiv.org/abs/2310.01596) | [Dataset](https://huggingface.co/ImagenHub) | [Twitter](https://twitter.com/???) | [Discord](https://discord.gg/???) |
+| [GitHub](https://github.com/TIGER-AI-Lab/ImagenHub) | [Paper](https://arxiv.org/abs/2310.01596) | [Dataset](https://huggingface.co/ImagenHub) | [Twitter](https://twitter.com/???) | [Discord](https://discord.gg/???) |
 
 ## 📜 Rules
 - Chat with any two models side-by-side and vote!
@@ -429,7 +430,7 @@ def build_side_by_side_ui_named(models):
 
     notice = gr.Markdown(notice_markdown, elem_id="notice_markdown")
 
-    with gr.Box(elem_id="share-region-named"):
+    with gr.Group(elem_id="share-region-named"):
         with gr.Row():
             for i in range(num_sides):
                 with gr.Column():
@@ -450,7 +451,7 @@ def build_side_by_side_ui_named(models):
                 label = "Model A" if i == 0 else "Model B"
                 with gr.Column():
                     chatbots[i] = gr.Image(
-                        label=label, elem_id=f"chatbot", height=550
+                        # label=label, elem_id=f"chatbot", height=550
                     )
 
         with gr.Row():

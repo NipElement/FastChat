@@ -36,6 +36,7 @@ from fastchat.model.model_falcon import generate_stream_falcon
 from fastchat.model.model_exllama import generate_stream_exllama
 from fastchat.model.model_xfastertransformer import generate_stream_xft
 from fastchat.model.model_stable_diffusion import generate_stream_sde
+from fastchat.model.model_imagenhub import generate_stream_imagen
 from fastchat.model.monkey_patch_non_inplace import (
     replace_llama_attn_with_non_inplace_operations,
 )
@@ -45,6 +46,7 @@ from fastchat.modules.xfastertransformer import load_xft_model, XftConfig
 from fastchat.modules.gptq import GptqConfig, load_gptq_quantized
 from fastchat.utils import get_gpu_memory
 from diffusers import StableDiffusionPipeline
+import imagen_hub
 
 # Check an environment variable to check if we should be sharing Peft model
 # weights.  When false we treat all Peft models as separate.
@@ -336,7 +338,10 @@ def load_model(
         "xpu",
         "npu",
     ):
-        model.to(device)
+        if model_path.startswith("imagenhub"):
+            model.pipe.to(device)
+        else:
+            model.to(device)
 
     if device == "xpu":
         model = torch.xpu.optimize(model, dtype=kwargs["torch_dtype"], inplace=True)
@@ -365,6 +370,7 @@ def get_generate_stream_function(model: torch.nn.Module, model_path: str):
     is_exllama = "exllama" in model_type
     is_xft = "xft" in model_type
     is_sdm = "stable" in model_type
+    is_imagen = "imagen" in model_type
 
     if is_chatglm:
         return generate_stream_chatglm
@@ -378,6 +384,8 @@ def get_generate_stream_function(model: torch.nn.Module, model_path: str):
         return generate_stream_xft
     elif is_sdm:
         return generate_stream_sde
+    elif is_imagen:
+        return generate_stream_imagen
 
     elif peft_share_base_weights and is_peft:
         # Return a curried stream function that loads the right adapter
@@ -2018,6 +2026,21 @@ class StableDiffusionAdapter(BaseModelAdapter):
         return get_conv_template("solar")
 
 
+class ImagenhubAdapter(BaseModelAdapter):
+    """The model adapter for Imagenhub model"""
+    def match(self, model_path: str):
+        return "imagenhub" in model_path.lower()
+
+    def load_model(self, model_path: str, from_pretrained_kwargs: dict):
+        model_name = list(model_path.split('_'))[1]
+        model = imagen_hub.load(model_name)
+
+        return model, model.pipe.tokenizer
+
+    def get_default_conv_template(self, model_path: str) -> Conversation:
+        return get_conv_template("solar")
+
+
 # Note: the registration order matters.
 # The one registered earlier has a higher matching priority.
 register_model_adapter(PeftModelAdapter)
@@ -2095,6 +2118,7 @@ register_model_adapter(DeepseekCoderAdapter)
 register_model_adapter(DeepseekChatAdapter)
 register_model_adapter(MetaMathAdapter)
 register_model_adapter(SolarAdapter)
+register_model_adapter(ImagenhubAdapter)
 register_model_adapter(StableDiffusionAdapter)
 
 

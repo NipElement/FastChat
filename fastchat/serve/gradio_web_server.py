@@ -47,17 +47,23 @@ from fastchat.utils import (
     get_window_url_params_with_tos_js,
     parse_gradio_auth_creds,
 )
+from fastchat.serve.model_worker import ModelWorker
+from fastchat.serve.base_model_worker import app
+import uvicorn
 
 
 logger = build_logger("gradio_web_server", "gradio_web_server.log")
 
 headers = {"User-Agent": "FastChat Client"}
 
-no_change_btn = gr.Button.update()
-enable_btn = gr.Button.update(interactive=True, visible=True)
-disable_btn = gr.Button.update(interactive=False)
-invisible_btn = gr.Button.update(interactive=False, visible=False)
-# no_change_btn = gr.Button(value="No Change", interactive=True, visible=True)
+# no_change_btn = gr.Button.update()
+# enable_btn = gr.Button.update(interactive=True, visible=True)
+# disable_btn = gr.Button.update(interactive=False)
+# invisible_btn = gr.Button.update(interactive=False, visible=False)
+enable_btn = gr.Button(interactive=True, visible=True)
+disable_btn = gr.Button(interactive=False)
+invisible_btn = gr.Button(interactive=False, visible=False)
+no_change_btn = gr.Button(value="No Change", interactive=True, visible=True)
 # enable_btn = gr.Button(value="Enable", interactive=True, visible=True)
 # disable_btn = gr.Button(value="Disable", interactive=False)
 # invisible_btn = gr.Button(value="Invisible", interactive=False, visible=False)
@@ -118,9 +124,10 @@ class State:
 class ImageState:
     def __init__(self, model_name):
         self.conv = get_conversation_template(model_name)
-        # self.conv_id = uuid.uuid4().hex
+        self.conv_id = uuid.uuid4().hex
         self.skip_next = False
         self.model_name = model_name
+        self.online_load = False
         self.prompt = None
         # self.conv = prompt
         self.output = None
@@ -135,7 +142,9 @@ class ImageState:
 
     def dict(self):
         base = {
+                "conv_id": self.conv_id,
                 "model_name": self.model_name,
+                "online_load": self.online_load
                 }
         return base
 
@@ -153,39 +162,42 @@ def get_conv_log_filename():
 
 
 def get_model_list(
-    controller_url, register_openai_compatible_models, add_chatgpt, add_claude, add_palm
+    controller_url, register_openai_compatible_models, add_chatgpt, add_claude, add_palm, post_load=False
 ):
-    if controller_url:
-        ret = requests.post(controller_url + "/refresh_all_workers")
-        assert ret.status_code == 200
-        ret = requests.post(controller_url + "/list_models")
-        models = ret.json()["models"]
+    if not post_load:
+        if controller_url:
+            ret = requests.post(controller_url + "/refresh_all_workers")
+            assert ret.status_code == 200
+            ret = requests.post(controller_url + "/list_models")
+            models = ret.json()["models"]
+        else:
+            models = []
+
+        # Add API providers
+        if register_openai_compatible_models:
+            global openai_compatible_models_info
+            openai_compatible_models_info = json.load(
+                open(register_openai_compatible_models)
+            )
+            models += list(openai_compatible_models_info.keys())
+
+        if add_chatgpt:
+            models += ["gpt-3.5-turbo", "gpt-3.5-turbo-1106"]
+        if add_claude:
+            models += ["claude-2.0", "claude-2.1", "claude-instant-1"]
+        if add_palm:
+            models += ["palm-2"]
+        models = list(set(models))
+
+        if "deluxe-chat-v1" in models:
+            del models[models.index("deluxe-chat-v1")]
+        if "deluxe-chat-v1.1" in models:
+            del models[models.index("deluxe-chat-v1.1")]
+
+        priority = {k: f"___{i:02d}" for i, k in enumerate(model_info)}
+        models.sort(key=lambda x: priority.get(x, x))
     else:
-        models = []
-
-    # Add API providers
-    if register_openai_compatible_models:
-        global openai_compatible_models_info
-        openai_compatible_models_info = json.load(
-            open(register_openai_compatible_models)
-        )
-        models += list(openai_compatible_models_info.keys())
-
-    if add_chatgpt:
-        models += ["gpt-3.5-turbo", "gpt-3.5-turbo-1106"]
-    if add_claude:
-        models += ["claude-2.0", "claude-2.1", "claude-instant-1"]
-    if add_palm:
-        models += ["palm-2"]
-    models = list(set(models))
-
-    if "deluxe-chat-v1" in models:
-        del models[models.index("deluxe-chat-v1")]
-    if "deluxe-chat-v1.1" in models:
-        del models[models.index("deluxe-chat-v1.1")]
-
-    priority = {k: f"___{i:02d}" for i, k in enumerate(model_info)}
-    models.sort(key=lambda x: priority.get(x, x))
+        models = ['imagenhub_SD', 'imagenhub_SDXL', 'imagenhub_SSD']
     logger.info(f"Models: {models}")
     return models
 
@@ -193,12 +205,14 @@ def get_model_list(
 def load_demo_single(models, url_params):
     logger.info("load_demo_single")
     selected_model = models[0] if len(models) > 0 else ""
+    logger.info(f"url_params: {url_params}")
     if "model" in url_params:
         model = url_params["model"]
         if model in models:
             selected_model = model
+    logger.info(f"selected_model: {selected_model}")
 
-    dropdown_update = gr.Dropdown(
+    dropdown_update = gr.Dropdown.update(
         choices=models, value=selected_model, visible=True
     )
 
@@ -268,14 +282,14 @@ def regenerate(state, request: gr.Request):
     ip = get_ip(request)
     logger.info(f"regenerate. ip: {ip}")
     state.conv.update_last_message(None)
-    return (state, "", "") + (disable_btn,) * 5
+    return (state, gr.Image(), "") + (disable_btn,) * 5
 
 
 def clear_history(request: gr.Request):
     ip = get_ip(request)
     logger.info(f"clear_history. ip: {ip}")
     state = None
-    return (state, [], "") + (disable_btn,) * 5
+    return (state, gr.Image(), "") + (disable_btn,) * 5
 
 
 def get_ip(request: gr.Request):
@@ -292,6 +306,9 @@ def add_text(state, model_selector, text, request: gr.Request):
 
     if state is None:
         state = ImageState(model_selector)
+
+    # add for online
+    state.online_load = False
 
     if len(text) <= 0:
         state.skip_next = True
@@ -377,6 +394,8 @@ def model_diffusion_worker_stream_iter(
         timeout=WORKER_API_TIMEOUT,
     )
 
+    logger.info(f"==== 2request2 ====\n{gen_params}")
+
     for chunk in response.iter_lines(decode_unicode=False, delimiter=b"\0"):
         if chunk:
             data = json.loads(chunk.decode())
@@ -422,6 +441,32 @@ def model_worker_stream_iter(
             yield data
 
 
+def load_model_worker(model_path):
+    worker_id = str(uuid.uuid4())[:8]
+    controller_addr = "http://localhost:21001"
+    worker_addr = "http://localhost:21002"
+    model_names = ''
+    max_gpu_memory = ''
+    host = "localhost"
+    port = 21002
+    limit_worker_concurrency = 10
+    worker = ModelWorker(
+        controller_addr,
+        worker_addr,
+        worker_id,
+        model_path,
+        model_names,
+        limit_worker_concurrency,
+        no_register=False,
+        device='cuda',
+        num_gpus=1,
+        max_gpu_memory=max_gpu_memory
+    )
+    logger.info("before")
+    # uvicorn.run(app, host=host, port=port, log_level="info")
+    logger.info("after")
+    return
+
 def diffusion_response(state, request: gr.Request):
     ip = get_ip(request)
     logger.info(f"diffusion_response. ip: {ip}")
@@ -429,10 +474,14 @@ def diffusion_response(state, request: gr.Request):
     conv, model_name = state.conv, state.model_name
     prompt = conv.messages[0][1]
     logger.info(f'prompt message: {prompt}')
+    if state.online_load:
+        load_model_worker(model_name)
 
     ret = requests.post(
         controller_url + "/get_worker_address", json={"model": model_name}
     )
+    logger.info(f"ret: {ret}")
+
     worker_addr = ret.json()["address"]
     logger.info(f"model_name: {model_name}, worker_addr: {worker_addr}")
 
@@ -825,7 +874,6 @@ def build_single_model_ui(models, add_promotion_links=False):
 
 ## 🤖 Choose any model to generate
 """
-
     state = gr.State()
     gr.Markdown(notice_markdown, elem_id="notice_markdown")
 
@@ -838,6 +886,7 @@ def build_single_model_ui(models, add_promotion_links=False):
                 show_label=False,
                 container=False,
             )
+            logger.info(f"model_selector: {model_selector}")
         with gr.Row():
             with gr.Accordion(
                 "🔍 Expand to see 20+ model descriptions",
@@ -976,15 +1025,16 @@ def build_single_model_ui(models, add_promotion_links=False):
     return [state, model_selector]
 
 
-def build_demo(models):
+def build_demo(models, online_load):
     with gr.Blocks(
         title="Chat with Open Large Language Models",
         theme=gr.themes.Default(),
         css=block_css,
     ) as demo:
-        url_params = gr.JSON(visible=False)
+        logger.info("begin")
+        logger.info(f"======models=====: {models}")
 
-        state, model_selector = build_single_model_ui(models)
+        state, model_selector = build_single_model_ui(models, online_load=online_load, add_promotion_links=True)
 
         if args.model_list_mode not in ["once", "reload"]:
             raise ValueError(f"Unknown model list mode: {args.model_list_mode}")
@@ -993,6 +1043,10 @@ def build_demo(models):
             load_js = get_window_url_params_with_tos_js
         else:
             load_js = get_window_url_params_js
+
+        url_params = gr.JSON(visible=True)
+
+        logger.info(f"======url_params=====: {url_params}")
 
         demo.load(
             load_demo,
@@ -1003,13 +1057,15 @@ def build_demo(models):
             ],
             _js=load_js,
         )
+        logger.info(f"======url_params=====: {url_params}")
+        logger.info("end")
 
     return demo
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="127.0.0.1")
+    parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int)
     parser.add_argument(
         "--share",
@@ -1070,6 +1126,11 @@ if __name__ == "__main__":
         type=str,
         help='Set the gradio authentication file path. The file should contain one or more user:password pairs in this format: "u1:p1,u2:p2,u3:p3"',
     )
+    parser.add_argument(
+        "--online-load",
+        action="store_true",
+        help="Whether to load the model online",
+    )
     args = parser.parse_args()
     logger.info(f"args: {args}")
 
@@ -1081,6 +1142,7 @@ if __name__ == "__main__":
         args.add_chatgpt,
         args.add_claude,
         args.add_palm,
+        post_load=args.online_load
     )
 
     # Set authorization credentials
@@ -1089,7 +1151,8 @@ if __name__ == "__main__":
         auth = parse_gradio_auth_creds(args.gradio_auth_path)
 
     # Launch the demo
-    demo = build_demo(models)
+    demo = build_demo(models, online_load=args.online_load)
+    # concurrency_count=args.concurrency_count,
     demo.queue(
         concurrency_count=args.concurrency_count, status_update_rate=10, api_open=False
     ).launch(

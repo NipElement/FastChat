@@ -19,7 +19,7 @@ from fastchat.constants import (
 from fastchat.model.model_adapter import get_conversation_template
 from fastchat.serve.gradio_block_arena_named import flash_buttons
 from fastchat.serve.gradio_web_server import (
-    State,
+    ImageState,
     bot_response,
     diffusion_response,
     get_conv_log_filename,
@@ -143,14 +143,14 @@ def regenerate(state0, state1, request: gr.Request):
     states = [state0, state1]
     for i in range(num_sides):
         states[i].conv.update_last_message(None)
-    return states + ["" for x in states] + [""] + [disable_btn] * 6
+    return states + [gr.Image() for x in states] + [""] + [disable_btn] * 6
 
 
 def clear_history(request: gr.Request):
     logger.info(f"clear_history (anony). ip: {get_ip(request)}")
     return (
         [None] * num_sides
-        + [None] * num_sides
+        + [gr.Image()] * num_sides
         + anony_names
         + [""]
         + [invisible_btn] * 4
@@ -171,6 +171,7 @@ SAMPLING_WEIGHTS = {
     # tier 0
     "stable-diffusion-v1-4": 4,
     "stable-diffusion-v1-5": 4,
+    "imagenhub_dreambooth": 4,
     "gpt-4": 4,
     "gpt-4-turbo": 4,
     "gpt-3.5-turbo": 2,
@@ -223,6 +224,8 @@ SAMPLING_WEIGHTS = {
 
 # target model sampling weights will be boosted.
 BATTLE_TARGETS = {
+    "imagenhub": {"imagenhub_dreambooth"},
+    "stable-diffusion": {"stable-diffusion-v1-4", "stable-diffusion-v1-5"},
     "gpt-4": {"claude-2.1", "gpt-4-turbo"},
     "gpt-4-turbo": {"gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-1106", "claude-2.1"},
     "gpt-3.5-turbo": {"claude-instant-1", "gpt-4", "claude-2.1"},
@@ -407,29 +410,29 @@ def get_battle_pair():
 #         + [slow_model_msg]
 #     )
 
-class ImageState:
-    def __init__(self, model_name):
-        self.conv = get_conversation_template(model_name)
-        # self.conv_id = uuid.uuid4().hex
-        self.skip_next = False
-        self.model_name = model_name
-        self.prompt = None
-        # self.conv = prompt
-        self.output = None
-
-        # if model_name == "palm-2":
-        #     # According to release note, "chat-bison@001" is PaLM 2 for chat.
-        #     # https://cloud.google.com/vertex-ai/docs/release-notes#May_10_2023
-        #     self.palm_chat = init_palm_chat("chat-bison@001")
-
-    # def to_gradio_chatbot(self):
-    #     return self.conv.to_gradio_chatbot()
-
-    def dict(self):
-        base = {
-                "model_name": self.model_name,
-                }
-        return base
+# class ImageState:
+#     def __init__(self, model_name):
+#         self.conv = get_conversation_template(model_name)
+#         # self.conv_id = uuid.uuid4().hex
+#         self.skip_next = False
+#         self.model_name = model_name
+#         self.prompt = None
+#         # self.conv = prompt
+#         self.output = None
+#
+#         # if model_name == "palm-2":
+#         #     # According to release note, "chat-bison@001" is PaLM 2 for chat.
+#         #     # https://cloud.google.com/vertex-ai/docs/release-notes#May_10_2023
+#         #     self.palm_chat = init_palm_chat("chat-bison@001")
+#
+#     # def to_gradio_chatbot(self):
+#     #     return self.conv.to_gradio_chatbot()
+#
+#     def dict(self):
+#         base = {
+#                 "model_name": self.model_name,
+#                 }
+#         return base
 
 
 def add_text(
@@ -455,7 +458,7 @@ def add_text(
             states[i].skip_next = True
         return (
             states
-            + ["" for x in states]
+            + [gr.Image() for x in states]
             + [""]
             + [
                 no_change_btn,
@@ -478,7 +481,7 @@ def add_text(
             states[i].skip_next = True
         return (
             states
-            + ["" for x in states]
+            + [gr.Image() for x in states]
             + [CONVERSATION_LIMIT_MSG]
             + [
                 no_change_btn,
@@ -601,20 +604,21 @@ def build_side_by_side_ui_anony(models):
     logger.info("build_side_by_side_ui_anony")
     notice_markdown = """
 # ⚔️  ImagenHub Arena ⚔️ : Standardizing the evaluation of conditional image generation models
-| [Blog](https://???) | [GitHub](https://github.com/TIGER-AI-Lab/ImagenHub) | [Paper](https://arxiv.org/abs/2310.01596) | [Dataset](https://huggingface.co/ImagenHub) | [Twitter](https://twitter.com/???) | [Discord](https://discord.gg/???) |
+| [GitHub](https://github.com/TIGER-AI-Lab/ImagenHub) | [Paper](https://arxiv.org/abs/2310.01596) | [Dataset](https://huggingface.co/ImagenHub) | [Twitter](https://twitter.com/???) | [Discord](https://discord.gg/???) |
 
 ## 📜 Rules
 - Ask any question to two anonymous models in same area (e.g., Dalle-2, Stable Diffusion XL in Text-guided Image Generation Model, MagicBrush, InstructPix2Pix in Text-guided Image Editing Model) and vote for the better one!
 - You can continue chatting until you identify a winner.
 - Vote won't be counted if model identity is revealed during conversation.
 
-## 🏆 Arena Elo [Leaderboard](https://???)
+## 🏆 Arena Elo 
 We introduce ImagenHub, a one-stop library to standardize the inference and evaluation of all the conditional image generation models.
 Find out who is the 🥇conditional image generation models!
 
 ## 👇 Generation now!
 
 """
+# [Leaderboard](https://???)
 
     states = [gr.State() for _ in range(num_sides)]
     model_selectors = [None] * num_sides
@@ -622,7 +626,7 @@ Find out who is the 🥇conditional image generation models!
 
     gr.Markdown(notice_markdown, elem_id="notice_markdown")
 
-    with gr.Box(elem_id="share-region-anony"):
+    with gr.Group(elem_id="share-region-anony"):
         with gr.Accordion("🔍 Expand to see 20+ Arena players", open=False):
             model_description_md = get_model_description_md(models)
             gr.Markdown(model_description_md, elem_id="model_description_markdown")
@@ -630,8 +634,8 @@ Find out who is the 🥇conditional image generation models!
             for i in range(num_sides):
                 label = "Model A" if i == 0 else "Model B"
                 with gr.Column():
-                    chatbots[i] = gr.Chatbot(
-                        label=label, elem_id=f"chatbot", height=550
+                    chatbots[i] = gr.Image(
+                        # label=label, elem_id=f"chatbot", height=550
                     )
                     # chatbots[i] = gr.Image(
                     #     label=label

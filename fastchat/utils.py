@@ -212,6 +212,8 @@ def pretty_print_semaphore(semaphore):
 get_window_url_params_js = """
 function() {
     const params = new URLSearchParams(window.location.search);
+    console.log("window.location", window.location)
+    console.log("window.location.search", window.location.search)
     url_params = Object.fromEntries(params);
     console.log("url_params", url_params);
     return url_params;

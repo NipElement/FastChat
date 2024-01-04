@@ -14,7 +14,7 @@ from fastchat.utils import build_logger
 logger = build_logger("diffusion_infer", 'diffusion_infer.log')
 
 @torch.inference_mode()
-def generate_stream_sde(
+def generate_stream_imagen(
     model,
     tokenizer,
     params,
@@ -23,16 +23,6 @@ def generate_stream_sde(
     stream_interval=2,
 ):
     prompt = params["prompt"]
-    # temperature = float(params.get("temperature", 1.0))
-    # repetition_penalty = float(params.get("repetition_penalty", 1.0))
-    # top_p = float(params.get("top_p", 1.0))
-    # top_k = int(params.get("top_k", 50))  # -1 means disable
-    # max_new_tokens = int(params.get("max_new_tokens", 1024))
-    # stop_token_ids = params.get("stop_token_ids", None) or []
-    # stop_token_ids.append(tokenizer.eos_token_id)
-    #
-    # decode_config = dict(skip_special_tokens=True, clean_up_tokenization_spaces=True)
-    # streamer = TextIteratorStreamer(tokenizer, **decode_config)
     encoding = tokenizer(prompt, return_tensors="pt").to(device)
     input_ids = encoding.input_ids
     # encoding["decoder_input_ids"] = encoding["input_ids"].clone()
@@ -66,9 +56,9 @@ def generate_stream_sde(
     #     stopping_criteria=StoppingCriteriaList([CodeBlockStopper()]),
     # )
     generation_kwargs = {"prompt": prompt}
-    model.scheduler = DDIMScheduler.from_config(model.scheduler.config)
-    logger.info(f"model.scheduler: {model.scheduler}")
-    thread = Thread(target=model, kwargs=generation_kwargs)
+    # model.pipe.scheduler = DDIMScheduler.from_config(model.pipe.scheduler.config)
+    logger.info(f"model.scheduler: {model.pipe.scheduler}")
+    thread = Thread(target=model.infer_one_image, kwargs=generation_kwargs)
     thread.start()
     # i = 0
     # output = ""
@@ -93,7 +83,7 @@ def generate_stream_sde(
     # else:
     #     finish_reason = "stop"
     logger.info(f"prompt: {prompt}")
-    output = model(prompt=prompt).images[0]
+    output = model.infer_one_image(prompt=prompt)
 
     yield {
         "text": output,

@@ -39,6 +39,7 @@ from fastchat.utils import (
     get_window_url_params_with_tos_js,
     parse_gradio_auth_creds,
 )
+import pdb
 
 logger = build_logger("gradio_web_server_multi", "gradio_web_server_multi.log")
 
@@ -108,13 +109,14 @@ def load_demo(url_params, request: gr.Request):
 
 
 def build_demo(models, elo_results_file, leaderboard_table_file):
-    text_size = gr.themes.sizes.text_md
+    # text_size = gr.themes.sizes.text_md
     with gr.Blocks(
         title="Chat with Open Large Language Models",
-        theme=gr.themes.Default(text_size=text_size),
+        theme=gr.themes.Default(),
         css=block_css,
     ) as demo:
         logger.info("build demo")
+        url_params = gr.JSON(visible=False)
         with gr.Tabs() as tabs:
             with gr.Tab("Arena (battle)", id=0):
                 side_by_side_anony_list = build_side_by_side_ui_anony(models)
@@ -132,7 +134,8 @@ def build_demo(models, elo_results_file, leaderboard_table_file):
             with gr.Tab("About Us", id=4):
                 about = build_about()
 
-        url_params = gr.JSON(visible=False)
+
+        logger.info(f"url_param: {url_params}")
 
         if args.model_list_mode not in ["once", "reload"]:
             raise ValueError(f"Unknown model list mode: {args.model_list_mode}")
@@ -141,6 +144,8 @@ def build_demo(models, elo_results_file, leaderboard_table_file):
             load_js = get_window_url_params_with_tos_js
         else:
             load_js = get_window_url_params_js
+
+        logger.info(f"url_param: {url_params}")
 
         demo.load(
             load_demo,
@@ -151,6 +156,7 @@ def build_demo(models, elo_results_file, leaderboard_table_file):
             + side_by_side_named_list,
             _js=load_js,
         )
+        # pdb.set_trace()
         logger.info("build demo end")
 
     return demo
@@ -158,7 +164,7 @@ def build_demo(models, elo_results_file, leaderboard_table_file):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", type=str, default="0.0.0.0")
+    parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int)
     parser.add_argument(
         "--share",
@@ -255,6 +261,8 @@ if __name__ == "__main__":
             args.add_palm,
         )
 
+    logger.info(f'models: {models}')
+
     # Set authorization credentials
     auth = None
     if args.gradio_auth_path is not None:
@@ -262,12 +270,30 @@ if __name__ == "__main__":
 
     # Launch the demo
     demo = build_demo(models, args.elo_results_file, args.leaderboard_table_file)
+    # demo.launch(
+    #     server_name=args.host,
+    #     server_port=args.port,
+    #     share=args.share,
+    #     max_threads=400,
+    #     auth=auth,
+    # )
+    # demo.queue(
+    #     concurrency_count=args.concurrency_count, status_update_rate=10, api_open=False
+    # ).launch(
+    #     server_name=args.host,
+    #     server_port=args.port,
+    #     share=args.share,
+    #     max_threads=400,
+    #     auth=auth,
+    # )
+
     demo.queue(
-        concurrency_count=args.concurrency_count, status_update_rate=10, api_open=False
+        status_update_rate=10, api_open=False
     ).launch(
         server_name=args.host,
         server_port=args.port,
         share=args.share,
-        max_threads=200,
+        max_threads=400,
         auth=auth,
     )
+
