@@ -1025,7 +1025,7 @@ def build_single_model_ui(models, add_promotion_links=False):
     return [state, model_selector]
 
 
-def build_demo(models, online_load):
+def build_demo(models):
     with gr.Blocks(
         title="Chat with Open Large Language Models",
         theme=gr.themes.Default(),
@@ -1034,7 +1034,7 @@ def build_demo(models, online_load):
         logger.info("begin")
         logger.info(f"======models=====: {models}")
 
-        state, model_selector = build_single_model_ui(models, online_load=online_load, add_promotion_links=True)
+        state, model_selector = build_single_model_ui(models, add_promotion_links=True)
 
         if args.model_list_mode not in ["once", "reload"]:
             raise ValueError(f"Unknown model list mode: {args.model_list_mode}")
@@ -1151,7 +1151,7 @@ if __name__ == "__main__":
         auth = parse_gradio_auth_creds(args.gradio_auth_path)
 
     # Launch the demo
-    demo = build_demo(models, online_load=args.online_load)
+    demo = build_demo(models)
     # concurrency_count=args.concurrency_count,
     demo.queue(
         concurrency_count=args.concurrency_count, status_update_rate=10, api_open=False

@@ -55,11 +55,11 @@ def generate_stream_imagen(
     #     generation_config=generation_config,
     #     stopping_criteria=StoppingCriteriaList([CodeBlockStopper()]),
     # )
-    generation_kwargs = {"prompt": prompt}
+    # generation_kwargs = {"prompt": prompt}
+    #
     # model.pipe.scheduler = DDIMScheduler.from_config(model.pipe.scheduler.config)
-    logger.info(f"model.scheduler: {model.pipe.scheduler}")
-    thread = Thread(target=model.infer_one_image, kwargs=generation_kwargs)
-    thread.start()
+    # thread = Thread(target=model.infer_one_image, kwargs=generation_kwargs)
+    # thread.start()
     # i = 0
     # output = ""
     # for new_text in streamer:
@@ -83,7 +83,10 @@ def generate_stream_imagen(
     # else:
     #     finish_reason = "stop"
     logger.info(f"prompt: {prompt}")
-    output = model.infer_one_image(prompt=prompt)
+    logger.info(f"model.scheduler: {model.pipe.scheduler}")
+    logger.info(f"model.type: {type(model)}")
+    # logger.info(f"prompt: {prompt}")
+    output = model.infer_one_image(prompt=prompt, seed=42)
 
     yield {
         "text": output,
@@ -94,7 +97,7 @@ def generate_stream_imagen(
         },
         "finish_reason": "stop",
     }
-    thread.join()
+    # thread.join()
 
     # clean
     gc.collect()

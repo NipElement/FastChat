@@ -338,9 +338,11 @@ def load_model(
         "xpu",
         "npu",
     ):
-        if model_path.startswith("imagenhub"):
-            model.pipe.to(device)
-        else:
+        if model_path.startswith("imagenhub") and not model_path.endswith("Alpha"):
+            # model.pipe.to(device)
+            # accelerate.cpu_offload(model.pipe, device)
+            model.pipe.enable_model_cpu_offload(device=device)
+        elif not model_path.endswith("Alpha"):
             model.to(device)
 
     if device == "xpu":
