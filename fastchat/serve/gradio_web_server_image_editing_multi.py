@@ -12,6 +12,17 @@ import gradio as gr
 from fastchat.constants import (
     SESSION_EXPIRATION_TIME,
 )
+from fastchat.serve.gradio_block_arena_anony_ie import (
+    build_side_by_side_ui_anony_ie,
+    load_demo_side_by_side_anony_ie,
+    set_global_vars_anony_ie,
+)
+from fastchat.serve.gradio_block_arena_named_ie import (
+    build_side_by_side_ui_named_ie,
+    load_demo_side_by_side_named_ie,
+    set_global_vars_named_ie,
+)
+
 from fastchat.serve.gradio_block_arena_anony import (
     build_side_by_side_ui_anony,
     load_demo_side_by_side_anony,
@@ -22,16 +33,17 @@ from fastchat.serve.gradio_block_arena_named import (
     load_demo_side_by_side_named,
     set_global_vars_named,
 )
-from fastchat.serve.gradio_web_server import (
-    set_global_vars,
+from fastchat.serve.gradio_web_image_editing_server import (
+    set_global_vars_ie,
     block_css,
-    build_single_model_ui,
+    build_single_model_ui_ie,
     build_about,
     get_model_list,
-    load_demo_single,
+    load_demo_single_ie,
     ip_expiration_dict,
     get_ip,
 )
+from fastchat.serve.gradio_web_server import load_demo_single, build_single_model_ui, set_global_vars
 from fastchat.serve.monitor.monitor import build_leaderboard_tab
 from fastchat.utils import (
     build_logger,
@@ -41,7 +53,7 @@ from fastchat.utils import (
 )
 import pdb
 
-logger = build_logger("gradio_web_server_multi", "gradio_web_server_multi.log")
+logger = build_logger("gradio_web_server_multi_ie", "gradio_web_server_multi_ie.log")
 
 
 def load_demo(url_params, request: gr.Request):
@@ -108,6 +120,93 @@ def load_demo(url_params, request: gr.Request):
     )
 
 
+def load_combine_demo(url_params, request: gr.Request):
+    logger.info("load_demo_multi")
+    global models
+
+    ip = get_ip(request)
+    logger.info(f"load_demo. ip: {ip}. params: {url_params}")
+    ip_expiration_dict[ip] = time.time() + SESSION_EXPIRATION_TIME
+
+    selected_combine = 0
+    if "generation" in url_params:
+        selected_combine = 0
+    elif "edition" in url_params:
+        selected_combine = 1
+
+
+    selected_edition = 0
+    if "arena" in url_params and "edition" in url_params:
+        selected_edition = 0
+    elif "compare" in url_params and "edition" in url_params:
+        selected_edition = 1
+    elif "single" in url_params and "edition" in url_params:
+        selected_edition = 2
+    elif "leaderboard" in url_params and "edition" in url_params:
+        selected_edition = 3
+
+    selected_generation = 0
+    if "arena" in url_params and "generation" in url_params:
+        selected_generation = 0
+    elif "compare" in url_params and "generation" in url_params:
+        selected_generation = 1
+    elif "single" in url_params and "generation" in url_params:
+        selected_generation = 2
+    elif "leaderboard" in url_params and "generation" in url_params:
+        selected_generation = 3
+
+    logger.info(f"selected_combine {selected_combine}")
+    logger.info(f"selected_generation {selected_generation}")
+    logger.info(f"selected_edition {selected_edition}")
+
+    if args.model_list_mode == "reload":
+        if args.anony_only_for_proprietary_model:
+            models = get_model_list(
+                args.controller_url,
+                args.register_openai_compatible_models,
+                False,
+                False,
+                False,
+            )
+        else:
+            models = get_model_list(
+                args.controller_url,
+                args.register_openai_compatible_models,
+                args.add_chatgpt,
+                args.add_claude,
+                args.add_palm,
+            )
+
+    models_anony = list(models)
+
+    models_anony_ie = [x for x in models_anony if "edition" in x]
+    models_anony_ig = [x for x in models_anony if "generation" in x]
+
+    models_anony_ig = list(set(models_anony_ig))
+    models_anony_ie = list(set(models_anony_ie))
+
+    models_ig = list(set(models_anony_ig))
+    models_ie = list(set(models_anony_ie))
+
+    single_updates_ig = load_demo_single(models_ig, url_params)
+    single_updates_ie = load_demo_single_ie(models_ie, url_params)
+
+    side_by_side_anony_updates_ie = load_demo_side_by_side_anony_ie(models_anony_ie, url_params)
+    side_by_side_named_updates_ie = load_demo_side_by_side_named_ie(models_ie, url_params)
+    side_by_side_anony_updates_ig = load_demo_side_by_side_anony(models_anony_ig, url_params)
+    side_by_side_named_updates_ig = load_demo_side_by_side_named(models_ig, url_params)
+    return (
+        (gr.Tabs.update(selected=selected_combine), gr.Tabs.update(selected=selected_generation),
+         gr.Tabs.update(selected=selected_edition))
+        + single_updates_ig
+        + side_by_side_anony_updates_ig
+        + side_by_side_named_updates_ig
+        + single_updates_ie
+        + side_by_side_anony_updates_ie
+        + side_by_side_named_updates_ie
+    )
+
+
 def build_demo(models, elo_results_file, leaderboard_table_file):
     # text_size = gr.themes.sizes.text_md
     with gr.Blocks(
@@ -154,6 +253,83 @@ def build_demo(models, elo_results_file, leaderboard_table_file):
             + single_model_list
             + side_by_side_anony_list
             + side_by_side_named_list,
+            _js=load_js,
+        )
+        # pdb.set_trace()
+        logger.info("build demo end")
+
+    return demo
+
+
+def build_combine_demo(models, elo_results_file, leaderboard_table_file):
+    with gr.Blocks(
+        title="Chat with Open Large Language Models",
+        theme=gr.themes.Default(),
+        css=block_css,
+    ) as demo:
+        logger.info("build demo")
+        url_params = gr.JSON(visible=False)
+        models_ie = [x for x in models if "edition" in x]
+        models_ig = [x for x in models if "generation" in x]
+        with gr.Tabs() as tabs_combine:
+            with gr.Tab("Image Generation", id=0):
+                with gr.Tabs() as tabs_ig:
+                    with gr.Tab("Generation Arena (battle)", id=1):
+                        side_by_side_anony_list_ig = build_side_by_side_ui_anony(models_ig)
+
+                    with gr.Tab("Generation Arena (side-by-side)", id=2):
+                        side_by_side_named_list_ig = build_side_by_side_ui_named(models_ig)
+
+                    with gr.Tab("Generation Direct Chat", id=3):
+                        single_model_list_ig = build_single_model_ui(
+                            models_ig, add_promotion_links=True
+                        )
+                    if elo_results_file:
+                        with gr.Tab("Generation Leaderboard", id=4):
+                            build_leaderboard_tab(elo_results_file, leaderboard_table_file)
+                    with gr.Tab("Generation About Us", id=5):
+                        about = build_about()
+            with gr.Tab("Image Edition", id=6):
+                with gr.Tabs() as tabs_ie:
+                    with gr.Tab("Edition Arena (battle)", id=7):
+                        side_by_side_anony_list_ie = build_side_by_side_ui_anony_ie(models_ie)
+
+                    with gr.Tab("Edition Arena (side-by-side)", id=8):
+                        side_by_side_named_list_ie = build_side_by_side_ui_named_ie(models_ie)
+
+                    with gr.Tab("Edition Direct Chat", id=9):
+                        single_model_list_ie = build_single_model_ui_ie(
+                            models_ie, add_promotion_links=True
+                        )
+                    if elo_results_file:
+                        with gr.Tab("Edition Leaderboard", id=10):
+                            build_leaderboard_tab(elo_results_file, leaderboard_table_file)
+                    with gr.Tab("Edition About Us", id=11):
+                        about = build_about()
+
+
+        logger.info(f"url_param: {url_params}")
+
+        if args.model_list_mode not in ["once", "reload"]:
+            raise ValueError(f"Unknown model list mode: {args.model_list_mode}")
+
+        if args.show_terms_of_use:
+            load_js = get_window_url_params_with_tos_js
+        else:
+            load_js = get_window_url_params_js
+
+        logger.info(f"url_param: {url_params}")
+
+        demo.load(
+            load_combine_demo,
+            [url_params],
+            [tabs_combine, tabs_ig, tabs_ie]
+            + single_model_list_ig
+            + side_by_side_anony_list_ig
+            + side_by_side_named_list_ig
+            + single_model_list_ie
+            + side_by_side_anony_list_ie
+            + side_by_side_named_list_ie,
             _js=load_js,
         )
         # pdb.set_trace()
@@ -244,6 +420,10 @@ if __name__ == "__main__":
     set_global_vars(args.controller_url, args.moderate)
     set_global_vars_named(args.moderate)
     set_global_vars_anony(args.moderate)
+
+    set_global_vars_ie(args.controller_url, args.moderate)
+    set_global_vars_named_ie(args.moderate)
+    set_global_vars_anony_ie(args.moderate)
     if args.anony_only_for_proprietary_model:
         models = get_model_list(
             args.controller_url,
@@ -269,7 +449,8 @@ if __name__ == "__main__":
         auth = parse_gradio_auth_creds(args.gradio_auth_path)
 
     # Launch the demo
-    demo = build_demo(models, args.elo_results_file, args.leaderboard_table_file)
+    # demo = build_demo(models, args.elo_results_file, args.leaderboard_table_file)
+    demo = build_combine_demo(models, args.elo_results_file, args.leaderboard_table_file)
     # demo.launch(
     #     server_name=args.host,
     #     server_port=args.port,
@@ -277,26 +458,27 @@ if __name__ == "__main__":
     #     max_threads=400,
     #     auth=auth,
     # )
-    # demo.queue(
-    #     concurrency_count=args.concurrency_count, status_update_rate=10, api_open=False
-    # ).launch(
-    #     server_name=args.host,
-    #     server_port=args.port,
-    #     share=args.share,
-    #     max_threads=400,
-    #     auth=auth,
-    # )
-
     demo.queue(
-        status_update_rate=10, api_open=False
+        concurrency_count=args.concurrency_count, status_update_rate=10, api_open=False
     ).launch(
         server_name=args.host,
         server_port=args.port,
-        root_path="/chatbot",
         share=args.share,
         max_threads=400,
+        root_path="/ImagenArenaIE",
         auth=auth,
-        # share_server_address="visual-arena.com:7000",
-        show_error=True
     )
+
+    # demo.queue(
+    #     status_update_rate=10, api_open=False
+    # ).launch(
+    #     server_name=args.host,
+    #     server_port=args.port,
+    #     root_path="/chatbot",
+    #     share=args.share,
+    #     max_threads=400,
+    #     auth=auth,
+    #     # share_server_address="visual-arena.com:7000",
+    #     show_error=True
+    # )
 

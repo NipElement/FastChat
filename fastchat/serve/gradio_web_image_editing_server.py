@@ -123,7 +123,8 @@ class State:
 
 class ImageState:
     def __init__(self, model_name):
-        self.conv = get_conversation_template(model_name)
+        # self.conv = get_conversation_template(model_name)
+        self.conv = []
         self.conv_id = uuid.uuid4().hex
         self.skip_next = False
         self.model_name = model_name
@@ -132,13 +133,6 @@ class ImageState:
         # self.conv = prompt
         self.output = None
 
-        # if model_name == "palm-2":
-        #     # According to release note, "chat-bison@001" is PaLM 2 for chat.
-        #     # https://cloud.google.com/vertex-ai/docs/release-notes#May_10_2023
-        #     self.palm_chat = init_palm_chat("chat-bison@001")
-
-    # def to_gradio_chatbot(self):
-    #     return self.conv.to_gradio_chatbot()
 
     def dict(self):
         base = {
@@ -149,7 +143,7 @@ class ImageState:
         return base
 
 
-def set_global_vars(controller_url_, enable_moderation_):
+def set_global_vars_ie(controller_url_, enable_moderation_):
     global controller_url, enable_moderation
     controller_url = controller_url_
     enable_moderation = enable_moderation_
@@ -202,7 +196,7 @@ def get_model_list(
     return models
 
 
-def load_demo_single(models, url_params):
+def load_demo_single_ie(models, url_params):
     logger.info("load_demo_single")
     selected_model = models[0] if len(models) > 0 else ""
     logger.info(f"url_params: {url_params}")
@@ -255,21 +249,21 @@ def upvote_last_response(state, model_selector, request: gr.Request):
     ip = get_ip(request)
     logger.info(f"upvote. ip: {ip}")
     vote_last_response(state, "upvote", model_selector, request)
-    return ("",) + (disable_btn,) * 3
+    return ("", "", gr.Image(type="pil"), "",) + (disable_btn,) * 3
 
 
 def downvote_last_response(state, model_selector, request: gr.Request):
     ip = get_ip(request)
     logger.info(f"downvote. ip: {ip}")
     vote_last_response(state, "downvote", model_selector, request)
-    return ("",) + (disable_btn,) * 3
+    return ("", "", gr.Image(type="pil"), "",) + (disable_btn,) * 3
 
 
 def flag_last_response(state, model_selector, request: gr.Request):
     ip = get_ip(request)
     logger.info(f"flag. ip: {ip}")
     vote_last_response(state, "flag", model_selector, request)
-    return ("",) + (disable_btn,) * 3
+    return ("", "", gr.Image(type="pil"), "",) + (disable_btn,) * 3
 
 
 # def regenerate(state, request: gr.Request):
@@ -281,15 +275,15 @@ def flag_last_response(state, model_selector, request: gr.Request):
 def regenerate(state, request: gr.Request):
     ip = get_ip(request)
     logger.info(f"regenerate. ip: {ip}")
-    state.conv.update_last_message(None)
-    return (state, gr.Image(), "") + (disable_btn,) * 5
+    # state.conv.update_last_message(None)
+    return (state, gr.Image(), "", "", gr.Image(type="pil"), "") + (disable_btn,) * 5
 
 
 def clear_history(request: gr.Request):
     ip = get_ip(request)
     logger.info(f"clear_history. ip: {ip}")
     state = None
-    return (state, gr.Image(), "") + (disable_btn,) * 5
+    return (state, gr.Image(), "", "", gr.Image(type="pil"), "") + (disable_btn,) * 5
 
 
 def get_ip(request: gr.Request):
@@ -300,9 +294,10 @@ def get_ip(request: gr.Request):
     return ip
 
 
-def add_text(state, model_selector, text, request: gr.Request):
+def add_text(state, model_selector, text_source, text_target, image_source, text_instruct, request: gr.Request):
     ip = get_ip(request)
-    logger.info(f"add_text. ip: {ip}. len: {len(text)}")
+    logger.info(f"add_text. ip: {ip}. source len: {len(text_source)}")
+    logger.info(f"add_text. ip: {ip}. target len: {len(text_target)}")
 
     if state is None:
         state = ImageState(model_selector)
@@ -310,28 +305,27 @@ def add_text(state, model_selector, text, request: gr.Request):
     # add for online
     state.online_load = False
 
-    if len(text) <= 0:
+    if len(text_source) <= 0 and len(text_target) <= 0:
         state.skip_next = True
-        return (state, "", "") + (no_change_btn,) * 5
-
-    flagged = moderation_filter(text, [state.model_name])
-    if flagged:
-        logger.info(f"violate moderation. ip: {ip}. text: {text}")
-        # overwrite the original text
-        text = MODERATION_MSG
+        return (state, gr.Image(), "", "", gr.Image(type="pil"), "") + (no_change_btn,) * 5
 
     conv = state.conv
-    if (len(conv.messages) - conv.offset) // 2 >= CONVERSATION_TURN_LIMIT:
-        logger.info(f"conversation turn limit. ip: {ip}. text: {text}")
-        state.skip_next = True
-        return (state, "", CONVERSATION_LIMIT_MSG) + (
-            no_change_btn,
-        ) * 5
+    # if (len(conv.messages) - conv.offset) // 2 >= CONVERSATION_TURN_LIMIT:
+    #     logger.info(f"conversation turn limit. ip: {ip}. text: {text}")
+    #     state.skip_next = True
+    #     return (state, "", CONVERSATION_LIMIT_MSG) + (
+    #         no_change_btn,
+    #     ) * 5
 
-    text = text[:INPUT_CHAR_LEN_LIMIT]  # Hard cut-off
-    conv.append_message(conv.roles[0], text)
+    text_source = text_source[:INPUT_CHAR_LEN_LIMIT]  # Hard cut-off
+    text_target = text_target[:INPUT_CHAR_LEN_LIMIT]
+    text_instruct = text_instruct[:INPUT_CHAR_LEN_LIMIT]
+    conv.append(text_source)
+    conv.append(text_target)
+    conv.append(image_source)
+    conv.append(text_instruct)
     # conv.append_message(conv.roles[1], None)
-    return (state, gr.Image(), text) + (disable_btn,) * 5
+    return (state, gr.Image(), text_source, text_target, image_source, text_instruct) + (disable_btn,) * 5
 
 # def add_text(state, model_selector, text, request: gr.Request):
 #     ip = get_ip(request)
@@ -376,14 +370,24 @@ def post_process_code(code):
 def model_diffusion_worker_stream_iter(
     model_name,
     worker_addr,
-    prompt,
+    prompt_source,
+    prompt_target,
+    image_source,
+    prompt_instruct
 ):
     # Make requests
     gen_params = {
         "model": model_name,
-        "prompt": prompt
+        "prompt_source": prompt_source,
+        "prompt_target": prompt_target,
+        "image_source": np.array(image_source).tolist(),
+        "prompt_instruct": prompt_instruct,
     }
-    logger.info(f"==== request ====\n{gen_params}")
+
+    logger.info(f"==== image_source ====\n{image_source.size}")
+    logger.info(f"==== image_source ====\n{np.array(image_source).shape}")
+
+    # logger.info(f"==== request ====\n{gen_params}")
 
     # Stream output
     response = requests.post(
@@ -394,7 +398,7 @@ def model_diffusion_worker_stream_iter(
         timeout=WORKER_API_TIMEOUT,
     )
 
-    logger.info(f"==== 2request2 ====\n{gen_params}")
+    # logger.info(f"==== 2request2 ====\n{gen_params}")
 
     for chunk in response.iter_lines(decode_unicode=False, delimiter=b"\0"):
         if chunk:
@@ -472,12 +476,15 @@ def diffusion_response(state, request: gr.Request):
     logger.info(f"diffusion_response. ip: {ip}")
     start_tstamp = time.time()
     conv, model_name = state.conv, state.model_name
-    prompt = conv.messages[0][1]
-    logger.info(f'prompt message: {prompt}')
+    prompt_source = conv[0]
+    prompt_target = conv[1]
+    image_source = conv[2]
+    prompt_instruct = conv[3]
+    logger.info(f'prompt source message: {prompt_source}')
+    logger.info(f'prompt target message: {prompt_target}')
+    logger.info(f'prompt instruct message: {prompt_instruct}')
     if state.online_load:
         load_model_worker(model_name)
-
-    logger.info(f'controller_url: {controller_url}')
 
     ret = requests.post(
         controller_url + "/get_worker_address", json={"model": model_name}
@@ -501,7 +508,10 @@ def diffusion_response(state, request: gr.Request):
     stream_iter = model_diffusion_worker_stream_iter(
         model_name,
         worker_addr,
-        prompt
+        prompt_source,
+        prompt_target,
+        image_source,
+        prompt_instruct
     )
 
     # try:
@@ -861,7 +871,7 @@ Learn more about partnership [here](https://lmsys.org/donations/).
 
 
 
-def build_single_model_ui(models, add_promotion_links=False, image_editing_task=False):
+def build_single_model_ui_ie(models, add_promotion_links=False):
     promotion = (
         """
 - | [GitHub](https://github.com/TIGER-AI-Lab/ImagenHub) | [Paper](https://arxiv.org/abs/2310.01596) | [Dataset](https://huggingface.co/ImagenHub) | [Twitter](https://twitter.com/???) | [Discord](https://discord.gg/???) |
@@ -900,27 +910,33 @@ def build_single_model_ui(models, add_promotion_links=False, image_editing_task=
 
     with gr.Row():
 
-        if not image_editing_task:
-            textbox = gr.Textbox(
-                show_label=False,
-                placeholder="👉 Enter your prompt and press ENTER",
-                elem_id="input_box",
-            )
-        else:
-            textbox_source = gr.Textbox(
-                show_label=False,
-                placeholder="👉 Enter your source prompt",
-                elem_id="input_box_s",
-            )
-            textbox_target = gr.Textbox(
-                show_label=False,
-                placeholder="👉 Enter your target prompt",
-                elem_id="input_box_t",
-            )
-        send_btn = gr.Button(value="Send", variant="primary", scale=0)
+        # if not image_editing_task:
+        #     textbox = gr.Textbox(
+        #         show_label=False,
+        #         placeholder="👉 Enter your prompt and press ENTER",
+        #         elem_id="input_box",
+        #     )
+        # else:
+        textbox_source = gr.Textbox(
+            show_label=False,
+            placeholder="👉 Enter your source prompt",
+            elem_id="input_box_s",
+        )
+        textbox_target = gr.Textbox(
+            show_label=False,
+            placeholder="👉 Enter your target prompt",
+            elem_id="input_box_t",
+        )
+        textbox_instruct = gr.Textbox(
+            show_label=False,
+            placeholder="👉 Enter your instruct prompt",
+            elem_id="input_box_t",
+        )
 
-    if image_editing_task:
+    # if image_editing_task:
+    with gr.Row():
         source_image = gr.Image(type="pil")
+        send_btn = gr.Button(value="Send", variant="primary", scale=0)
 
     with gr.Row():
         chatbot = gr.Image()
@@ -932,32 +948,6 @@ def build_single_model_ui(models, add_promotion_links=False, image_editing_task=
         regenerate_btn = gr.Button(value="🔄  Regenerate", interactive=False)
         clear_btn = gr.Button(value="🗑️  Clear history", interactive=False)
 
-    # with gr.Accordion("Parameters", open=False) as parameter_row:
-    #     temperature = gr.Slider(
-    #         minimum=0.0,
-    #         maximum=1.0,
-    #         value=0.7,
-    #         step=0.1,
-    #         interactive=True,
-    #         label="Temperature",
-    #     )
-    #     top_p = gr.Slider(
-    #         minimum=0.0,
-    #         maximum=1.0,
-    #         value=1.0,
-    #         step=0.1,
-    #         interactive=True,
-    #         label="Top P",
-    #     )
-    #     max_output_tokens = gr.Slider(
-    #         minimum=16,
-    #         maximum=1024,
-    #         value=512,
-    #         step=64,
-    #         interactive=True,
-    #         label="Max output tokens",
-    #     )
-
     if add_promotion_links:
         gr.Markdown(acknowledgment_md, elem_id="ack_markdown")
 
@@ -966,17 +956,17 @@ def build_single_model_ui(models, add_promotion_links=False, image_editing_task=
     upvote_btn.click(
         upvote_last_response,
         [state, model_selector],
-        [textbox, upvote_btn, downvote_btn, flag_btn],
+        [textbox_source, textbox_target, source_image, textbox_instruct,  upvote_btn, downvote_btn, flag_btn],
     )
     downvote_btn.click(
         downvote_last_response,
         [state, model_selector],
-        [textbox, upvote_btn, downvote_btn, flag_btn],
+        [textbox_source, textbox_target, source_image, textbox_instruct, upvote_btn, downvote_btn, flag_btn],
     )
     flag_btn.click(
         flag_last_response,
         [state, model_selector],
-        [textbox, upvote_btn, downvote_btn, flag_btn],
+        [textbox_source, textbox_target, source_image, textbox_instruct, upvote_btn, downvote_btn, flag_btn],
     )
     # regenerate_btn.click(regenerate, state, [state, chatbot, textbox] + btn_list).then(
     #     bot_response,
@@ -984,14 +974,14 @@ def build_single_model_ui(models, add_promotion_links=False, image_editing_task=
     #     [state, chatbot] + btn_list,
     # )
 
-    regenerate_btn.click(regenerate, state, [state, chatbot, textbox] + btn_list).then(
+    regenerate_btn.click(regenerate, state, [state, chatbot, textbox_source, textbox_target, source_image, textbox_instruct] + btn_list).then(
         diffusion_response,
         [state],
         [state, chatbot] + btn_list,
     )
-    clear_btn.click(clear_history, None, [state, chatbot, textbox] + btn_list)
+    clear_btn.click(clear_history, None, [state, chatbot, textbox_source, textbox_target, source_image, textbox_instruct] + btn_list)
 
-    model_selector.change(clear_history, None, [state, chatbot, textbox] + btn_list)
+    model_selector.change(clear_history, None, [state, chatbot, textbox_source, textbox_target, source_image, textbox_instruct] + btn_list)
 
     # textbox.submit(
     #     add_text, [state, model_selector, textbox], [state, chatbot, textbox] + btn_list
@@ -1000,13 +990,20 @@ def build_single_model_ui(models, add_promotion_links=False, image_editing_task=
     #     [state, temperature, top_p, max_output_tokens],
     #     [state, chatbot] + btn_list,
     # )
-    textbox.submit(
-        add_text, [state, model_selector, textbox], [state, chatbot, textbox] + btn_list
-    ).then(
-        diffusion_response,
-        [state],
-        [state, chatbot] + btn_list,
-    )
+    # textbox_source.submit(
+    #     add_text, [state, model_selector, textbox], [state, chatbot, textbox] + btn_list
+    # ).then(
+    #     diffusion_response,
+    #     [state],
+    #     [state, chatbot] + btn_list,
+    # )
+    # textbox.submit(
+    #     add_text, [state, model_selector, textbox], [state, chatbot, textbox] + btn_list
+    # ).then(
+    #     diffusion_response,
+    #     [state],
+    #     [state, chatbot] + btn_list,
+    # )
     # send_btn.click(
     #     add_text,
     #     [state, model_selector, textbox],
@@ -1018,8 +1015,8 @@ def build_single_model_ui(models, add_promotion_links=False, image_editing_task=
     # )
     send_btn.click(
         add_text,
-        [state, model_selector, textbox],
-        [state, chatbot, textbox] + btn_list,
+        [state, model_selector, textbox_source, textbox_target, source_image, textbox_instruct],
+        [state, chatbot, textbox_source, textbox_target, source_image, textbox_instruct] + btn_list,
     ).then(
         diffusion_response,
         [state],
@@ -1139,7 +1136,7 @@ if __name__ == "__main__":
     logger.info(f"args: {args}")
 
     # Set global variables
-    set_global_vars(args.controller_url, args.moderate)
+    set_global_vars_ie(args.controller_url, args.moderate)
     models = get_model_list(
         args.controller_url,
         args.register_openai_compatible_models,

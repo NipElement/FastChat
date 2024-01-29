@@ -106,3 +106,6 @@ def generate_stream_imagen(
         torch.xpu.empty_cache()
     if device == "npu":
         torch.npu.empty_cache()
+
+
+

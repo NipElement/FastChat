@@ -1,0 +1,47 @@
+2024-01-24 17:45:26 | WARNING | xformers | WARNING[XFORMERS]: xFormers can't load C++/CUDA extensions. xFormers was built for:
+    PyTorch 2.0.1+cu118 with CUDA 1108 (you have 1.13.1+cu117)
+    Python  3.9.16 (you have 3.9.18)
+  Please reinstall xformers (see https://github.com/facebookresearch/xformers#installing-xformers)
+  Memory-efficient attention, SwiGLU, sparse and more won't be available.
+  Set XFORMERS_MORE_DETAILS=1 for more details
+2024-01-24 17:45:28 | INFO | stdout | Segment Anything Model (SAM) / GroundingDINO not installed.
+2024-01-24 17:45:28 | INFO | stdout | 
+2024-01-24 17:45:28 | ERROR | stderr | /home/tianle/ImagenHub/src/imagen_hub/pipelines/blended_diffusion/blended_diffusion_src/CLIP/clip/clip.py:23: UserWarning: PyTorch version 1.7.1 or higher is recommended
+2024-01-24 17:45:28 | ERROR | stderr |   warnings.warn("PyTorch version 1.7.1 or higher is recommended")
+2024-01-24 17:45:28 | INFO | faiss.loader | Loading faiss with AVX2 support.
+2024-01-24 17:45:28 | INFO | faiss.loader | Successfully loaded faiss with AVX2 support.
+2024-01-24 17:45:30 | INFO | model_worker | args: Namespace(host='localhost', port=31002, worker_address='http://localhost:31002', controller_address='http://localhost:21001', model_path='imagenhub_DiffEdit', revision='main', device='cuda', gpus=None, num_gpus=1, max_gpu_memory=None, dtype=None, load_8bit=False, cpu_offloading=False, gptq_ckpt=None, gptq_wbits=16, gptq_groupsize=-1, gptq_act_order=False, awq_ckpt=None, awq_wbits=16, awq_groupsize=-1, enable_exllama=False, exllama_max_seq_len=4096, exllama_gpu_split=None, exllama_cache_8bit=False, enable_xft=False, xft_max_seq_len=4096, xft_dtype=None, model_names=None, conv_template=None, embed_in_truncate=False, limit_worker_concurrency=5, stream_interval=2, no_register=False, seed=None, debug=False, ssl=False)
+2024-01-24 17:45:30 | INFO | model_worker | Loading the model ['imagenhub_DiffEdit'] on worker f0d35ea1 ...
+2024-01-24 17:45:30 | ERROR | stderr | Loading pipeline components...:   0%|          | 0/6 [00:00<?, ?it/s]
+2024-01-24 17:45:31 | ERROR | stderr | Loading pipeline components...:  17%|█▋        | 1/6 [00:01<00:06,  1.21s/it]
+2024-01-24 17:45:31 | ERROR | stderr | 
+2024-01-24 17:45:31 | ERROR | stderr | Traceback (most recent call last):
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/anaconda3/envs/imagen/lib/python3.9/runpy.py", line 197, in _run_module_as_main
+2024-01-24 17:45:31 | ERROR | stderr |     return _run_code(code, main_globals, None,
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/anaconda3/envs/imagen/lib/python3.9/runpy.py", line 87, in _run_code
+2024-01-24 17:45:31 | ERROR | stderr |     exec(code, run_globals)
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/FastChat/fastchat/serve/model_worker.py", line 384, in <module>
+2024-01-24 17:45:31 | ERROR | stderr |     args, worker = create_model_worker()
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/FastChat/fastchat/serve/model_worker.py", line 356, in create_model_worker
+2024-01-24 17:45:31 | ERROR | stderr |     worker = ModelWorker(
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/FastChat/fastchat/serve/model_worker.py", line 80, in __init__
+2024-01-24 17:45:31 | ERROR | stderr |     self.model, self.tokenizer = load_model(
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/FastChat/fastchat/model/model_adapter.py", line 328, in load_model
+2024-01-24 17:45:31 | ERROR | stderr |     model, tokenizer = adapter.load_model(model_path, kwargs)
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/FastChat/fastchat/model/model_adapter.py", line 2044, in load_model
+2024-01-24 17:45:31 | ERROR | stderr |     model = imagen_hub.load(model_name)
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/ImagenHub/src/imagen_hub/infermodels/__init__.py", line 86, in get_model
+2024-01-24 17:45:31 | ERROR | stderr |     model_instance = model_class()
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/ImagenHub/src/imagen_hub/infermodels/diffedit.py", line 24, in __init__
+2024-01-24 17:45:31 | ERROR | stderr |     self.pipe = StableDiffusionDiffEditPipeline.from_pretrained(
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/anaconda3/envs/imagen/lib/python3.9/site-packages/diffusers/pipelines/pipeline_utils.py", line 1265, in from_pretrained
+2024-01-24 17:45:31 | ERROR | stderr |     loaded_sub_model = load_sub_model(
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/anaconda3/envs/imagen/lib/python3.9/site-packages/diffusers/pipelines/pipeline_utils.py", line 520, in load_sub_model
+2024-01-24 17:45:31 | ERROR | stderr |     loaded_sub_model = load_method(os.path.join(cached_folder, name), **loading_kwargs)
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/anaconda3/envs/imagen/lib/python3.9/site-packages/transformers/modeling_utils.py", line 3742, in from_pretrained
+2024-01-24 17:45:31 | ERROR | stderr |     ) = cls._load_pretrained_model(
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/anaconda3/envs/imagen/lib/python3.9/site-packages/transformers/modeling_utils.py", line 4161, in _load_pretrained_model
+2024-01-24 17:45:31 | ERROR | stderr |     new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
+2024-01-24 17:45:31 | ERROR | stderr |   File "/home/tianle/anaconda3/envs/imagen/lib/python3.9/site-packages/transformers/modeling_utils.py", line 744, in _load_state_dict_into_meta_model
+2024-01-24 17:45:31 | ERROR | stderr |     param = param.to(dtype)
+2024-01-24 17:45:31 | ERROR | stderr | KeyboardInterrupt

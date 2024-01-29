@@ -1,3 +1,9 @@
+---
+title: visual-arena
+app_file: fastchat/serve/gradio_web_server_multi.py
+sdk: gradio
+sdk_version: 4.0.0
+---
 # Useage
 
 1. Install requirement
